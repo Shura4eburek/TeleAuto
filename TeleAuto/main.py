@@ -6,10 +6,12 @@ import vpn
 
 TOTP_OFFSET = 40  # скорректируйте при необходимости
 
+
 def get_current_totp(secret, offset_seconds=TOTP_OFFSET, interval=30):
     totp = pyotp.TOTP(secret, interval=interval)
     current_time = time.time() + offset_seconds
     return totp.at(current_time)
+
 
 def main():
     creds = load_credentials()
@@ -38,11 +40,11 @@ def main():
     if not vpn.input_2fa_code_and_reconnect(totp_code):
         print("Не удалось ввести 2FA код и нажать вторую кнопку Connect")
 
-
     vpn.wait_for_connection()
 
     login_telemart(username, password)
     time.sleep(10)
+
 
 if __name__ == "__main__":
     main()

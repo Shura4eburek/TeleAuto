@@ -78,7 +78,8 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
         container = edit_box.parent()
         buttons = container.children(control_type="Button")
 
-        connect_buttons = [btn for btn in buttons if "connect" in btn.window_text().lower() and btn.is_visible() and btn.is_enabled()]
+        connect_buttons = [btn for btn in buttons if
+                           "connect" in btn.window_text().lower() and btn.is_visible() and btn.is_enabled()]
 
         if len(connect_buttons) >= 2:
             btn = connect_buttons[1]
