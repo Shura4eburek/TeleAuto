@@ -1,5 +1,35 @@
 ﻿# telemart_login.py
+import subprocess
+from datetime import time
+from time import sleep
+
 from pywinauto import Desktop
+
+
+def start_telemrt(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClient\Telemart.Client.exe"):
+    try:
+        # Проверяем процессы
+        result = subprocess.run(['tasklist'], capture_output=True, text=True)
+        process_found = 'telemart' in result.stdout.lower()
+
+        # Проверяем окна
+        window_found = False
+        try:
+            from pywinauto import Desktop
+            spec = Desktop(backend="uia").window(title_re=r"^Telemart\.Client")
+            window_found = spec.exists()
+        except:
+            pass
+
+        if not (process_found or window_found):
+            print("Запускаем Telemart Client...")
+            subprocess.Popen([path])
+            time.sleep(5)
+        else:
+            print("Telemart.Client уже запущен")
+    except Exception as e:
+        print(f"Ошибка при проверке/запуске Telemart Client: {e}")
+
 
 def login_telemart(username: str, password: str, timeout: int = 20):
     """

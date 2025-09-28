@@ -1,6 +1,6 @@
 ﻿import time
 import pyotp
-from src.teleauto.login.login import login_telemart
+from src.teleauto.login.login import login_telemart, start_telemrt
 from credentials import input_credentials, load_credentials, verify_pin, decrypt_credentials
 from src.teleauto.vpn import vpn
 
@@ -32,29 +32,39 @@ def main():
         else:
             username, password, secret_2fa = decrypt_credentials(creds, None)
 
-    vpn.start_pritunl()
-    vpn.click_pritunl_connect()
-
+    ip_vpn = vpn.get_first_tap_adapter()
     totp_code = get_current_totp(secret_2fa)
-    if not vpn.input_2fa_code_and_reconnect(totp_code):
-        print("Не удалось ввести 2FA код и нажать вторую кнопку Connect")
-
-    time.sleep(5)
-
     # Получаем IP с любого активного адаптера Pritunl
     print("\nПолучение IP адреса активного адаптера Pritunl...")
-    ip_vpn = vpn.get_first_tap_adapter()
 
     if ip_vpn:
-        print(f"Используем IP для проверки подключения: {ip_vpn}")
-        if vpn.vpn_connect_with_retries(ip_vpn, totp_code):
-            print("VPN подключен успешно!")
+        print("Проверка активного подключения")
+        if vpn.vpn_connect_check(ip_vpn):
+            print("VPN уже подключен!")
+            start_telemrt()
+            time.sleep(5)
             login_telemart(username, password)
         else:
-            print("Не удалось подключиться к VPN")
+            vpn.start_pritunl()
+            vpn.click_pritunl_connect()
+            if not vpn.input_2fa_code_and_reconnect(totp_code):
+                print("Не удалось ввести 2FA код и нажать вторую кнопку Connect")
 
+            time.sleep(5)
+
+            # Получаем IP с любого активного адаптера Pritunl
+            print("\nПолучение IP адреса активного адаптера Pritunl...")
+
+            if ip_vpn:
+                print(f"Используем IP для проверки подключения: {ip_vpn}")
+                if vpn.vpn_connect_with_retries(ip_vpn, totp_code):
+                    print("VPN подключен успешно!")
+                    start_telemrt()
+                    time.sleep(5)
+                    login_telemart(username, password)
+                else:
+                    print("Не удалось подключиться к VPN")
     time.sleep(10)
-
 
 if __name__ == "__main__":
     main()
