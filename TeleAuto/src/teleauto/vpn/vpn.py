@@ -114,8 +114,38 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
         return False
 
 
+def vpn_connect_check(ip, attempts=3, interval=1):
+    """
+    Пингует IP-адрес с заданным количеством попыток и интервалом.
 
-def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=3, max_pings=3):
+    :param ip: IP-адрес для пинга
+    :param attempts: количество попыток (по умолчанию 3)
+    :param interval: интервал между попытками в секундах (по умолчанию 1)
+    :return: True если хотя бы один пинг успешен, False если все неудачны
+    """
+
+    for attempt in range(1, attempts + 1):
+        print(f"Попытка {attempt} из {attempts}: пинг {ip}")
+
+        result = subprocess.run(
+            ["ping", "-n", "1", "-w", "1000", ip],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if "TTL=" in result.stdout:
+            print(f"Ping {ip} успешен.")
+            return True
+        else:
+            print(f"Ping {ip} неудачен.")
+            if attempt < attempts:
+                time.sleep(interval)
+
+    print(f"Все {attempts} попытки пинга {ip} неудачны.")
+    return False
+
+def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=1, max_pings=10):
     """
     Ждёт подключения к VPN, пингует ip каждые ping_interval секунд.
     Если с 5-й попытки пинг не успешен, вызывает input_2fa_func (максимум max_attempts раз).
