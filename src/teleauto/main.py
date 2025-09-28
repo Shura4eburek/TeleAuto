@@ -64,7 +64,6 @@ def main():
                     login_telemart(username, password)
                 else:
                     print("Не удалось подключиться к VPN")
-    time.sleep(10)
 
 if __name__ == "__main__":
     main()

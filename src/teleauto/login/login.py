@@ -1,7 +1,6 @@
 ﻿# telemart_login.py
 import subprocess
 from datetime import time
-from time import sleep
 
 from pywinauto import Desktop
 
