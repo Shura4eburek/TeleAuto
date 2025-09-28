@@ -6,7 +6,7 @@ from time import sleep
 from pywinauto import Desktop
 
 
-def start_telemrt(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClient\Telemart.Client.exe"):
+def start_telemart(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClient\Telemart.Client.exe"):
     try:
         # Проверяем процессы
         result = subprocess.run(['tasklist'], capture_output=True, text=True)

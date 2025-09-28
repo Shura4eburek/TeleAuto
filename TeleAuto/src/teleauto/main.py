@@ -1,6 +1,6 @@
 ﻿import time
 import pyotp
-from src.teleauto.login.login import login_telemart, start_telemrt
+from src.teleauto.login.login import login_telemart, start_telemart
 from credentials import input_credentials, load_credentials, verify_pin, decrypt_credentials
 from src.teleauto.vpn import vpn
 
@@ -41,7 +41,7 @@ def main():
         print("Проверка активного подключения")
         if vpn.vpn_connect_check(ip_vpn):
             print("VPN уже подключен!")
-            start_telemrt()
+            start_telemart()
             time.sleep(5)
             login_telemart(username, password)
         else:
@@ -59,7 +59,7 @@ def main():
                 print(f"Используем IP для проверки подключения: {ip_vpn}")
                 if vpn.vpn_connect_with_retries(ip_vpn, totp_code):
                     print("VPN подключен успешно!")
-                    start_telemrt()
+                    start_telemart()
                     time.sleep(5)
                     login_telemart(username, password)
                 else:
