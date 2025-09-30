@@ -32,14 +32,14 @@ def main():
         else:
             username, password, secret_2fa = decrypt_credentials(creds, None)
 
-    ip_vpn = vpn.get_first_tap_adapter()
+    ip_vpn_first_try = vpn.get_first_tap_adapter()
     totp_code = get_current_totp(secret_2fa)
     # Получаем IP с любого активного адаптера Pritunl
     print("\nПолучение IP адреса активного адаптера Pritunl...")
 
-    if ip_vpn:
+    if ip_vpn_first_try:
         print("Проверка активного подключения")
-        if vpn.vpn_connect_check(ip_vpn):
+        if vpn.vpn_connect_check(ip_vpn_first_try):
             print("VPN уже подключен!")
             start_telemart()
             time.sleep(5)
@@ -51,7 +51,7 @@ def main():
                 print("Не удалось ввести 2FA код и нажать вторую кнопку Connect")
 
             time.sleep(5)
-
+            ip_vpn = vpn.get_first_tap_adapter()
             # Получаем IP с любого активного адаптера Pritunl
             print("\nПолучение IP адреса активного адаптера Pritunl...")
 
