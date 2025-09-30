@@ -1,6 +1,5 @@
 ﻿import ipaddress
 import time
-import re
 import subprocess
 
 import ifaddr
@@ -13,7 +12,16 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
         if "pritunl.exe" not in result.stdout.lower():
             print("Запускаем Pritunl...")
             subprocess.Popen([path])
-            time.sleep(5)  # Можно увеличить время ожидания
+            # Ждём появления и готовности окна
+            for _ in range(30):  # 30 секунд максимум
+                time.sleep(1)
+                try:
+                    app = Desktop(backend="uia").window(title_re=".*Pritunl Client.*")
+                    if app.exists() and app.is_visible():
+                        app.wait("ready", timeout=5)
+                        break
+                except:
+                    continue
         else:
             print("Pritunl уже запущен")
     except Exception as e:
@@ -36,22 +44,35 @@ def click_pritunl_connect(window_title_re=".*Pritunl Client.*"):
         app.wait("exists ready visible enabled", timeout=30)
         app.set_focus()
 
-        buttons = app.descendants(control_type="Button")
+        # Ждем появления кнопок Connect с повторными попытками
+        for attempt in range(10):  # 10 попыток с интервалом 1 сек
+            buttons = app.descendants(control_type="Button")
+            connect_buttons = []
 
-        for btn in buttons:
-            try:
-                text = btn.window_text().lower()
-                if "connect" in text and btn.is_visible() and btn.is_enabled():
-                    rect = btn.rectangle()
-                    x = (rect.left + rect.right) // 2
-                    y = (rect.top + rect.bottom) // 2
-                    btn.click_input(coords=(x - rect.left, y - rect.top))
-                    print("Кнопка Connect нажата.")
-                    return True
-            except Exception:
-                continue
-        print("Кнопка Connect не найдена.")
+            for btn in buttons:
+                try:
+                    text = btn.window_text().lower()
+                    if "connect" in text and btn.is_visible() and btn.is_enabled():
+                        connect_buttons.append(btn)
+                except Exception:
+                    continue
+
+            if connect_buttons:
+                # Найдена хотя бы одна кнопка Connect
+                btn = connect_buttons[0]
+                rect = btn.rectangle()
+                x = (rect.left + rect.right) // 2
+                y = (rect.top + rect.bottom) // 2
+                btn.click_input(coords=(x - rect.left, y - rect.top))
+                print("Кнопка Connect нажата.")
+                return True
+            else:
+                print(f"Кнопки Connect не найдены, попытка {attempt + 1}/10")
+                time.sleep(1)
+
+        print("Кнопка Connect не найдена после всех попыток.")
         return False
+
     except Exception as e:
         print(f"Ошибка при нажатии кнопки Connect: {e}")
         return False
@@ -84,6 +105,7 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
 
         # Поиск контейнера Profile Connect - родителя кнопок Connect
         # Ищем окно-диалог с title или auto_id Profile Connect
+
         profile_connect_dialog = app.child_window(title_re=".*Profile Connect.*", control_type="Window")
         if not profile_connect_dialog.exists():
             # Альтернативно ищем Custom или GroupBox с названием Profile Connect
@@ -114,7 +136,7 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
         return False
 
 
-def vpn_connect_check(ip, attempts=3, interval=1):
+def vpn_connect_check(ip, attempts=3, interval=0.5):
     """
     Пингует IP-адрес с заданным количеством попыток и интервалом.
 
@@ -125,7 +147,6 @@ def vpn_connect_check(ip, attempts=3, interval=1):
     """
 
     for attempt in range(1, attempts + 1):
-        print(f"Попытка {attempt} из {attempts}: пинг {ip}")
 
         result = subprocess.run(
             ["ping", "-n", "1", "-w", "1000", ip],
@@ -145,7 +166,8 @@ def vpn_connect_check(ip, attempts=3, interval=1):
     print(f"Все {attempts} попытки пинга {ip} неудачны.")
     return False
 
-def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=1, max_pings=10):
+
+def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=10):
     """
     Ждёт подключения к VPN, пингует ip каждые ping_interval секунд.
     Если с 5-й попытки пинг не успешен, вызывает input_2fa_func (максимум max_attempts раз).
