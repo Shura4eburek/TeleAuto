@@ -1,6 +1,6 @@
 ﻿# telemart_login.py
 import subprocess
-from datetime import time
+import time
 
 from pywinauto import Desktop
 
