@@ -4,6 +4,7 @@ from src.teleauto.login.login import login_telemart, start_telemart
 from credentials import input_credentials, load_credentials, verify_pin, decrypt_credentials
 from src.teleauto.vpn import vpn
 
+
 TOTP_OFFSET = 40  # скорректируйте при необходимости
 
 
@@ -48,7 +49,7 @@ def main():
             vpn.start_pritunl()
             vpn.click_pritunl_connect()
             if not vpn.input_2fa_code_and_reconnect(totp_code):
-                print("Не удалось ввести 2FA код и нажать вторую кнопку Connect")
+                print("Не удалось ввести 2FA код и нажать кнопку Connect")
 
             time.sleep(5)
             ip_vpn = vpn.get_first_tap_adapter()
