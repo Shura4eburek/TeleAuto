@@ -8,22 +8,64 @@ from pywinauto import Desktop
 
 def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
     try:
+        # Проверяем процессы
         result = subprocess.run(['tasklist'], capture_output=True, text=True)
-        if "pritunl.exe" not in result.stdout.lower():
+        process_found = 'pritunl.exe' in result.stdout.lower()
+
+        # Проверяем окна
+        window_found = False
+        window_visible = False
+        try:
+            spec = Desktop(backend="uia").window(title_re=r".*Pritunl Client.*")
+            window_found = spec.exists()
+            if window_found:
+                # Проверяем видимость окна
+                try:
+                    wrapper = spec.wrapper_object()
+                    window_visible = wrapper.is_visible()
+                    print(f"Окно Pritunl найдено, видимость: {window_visible}")
+                except Exception as e:
+                    print(f"Ошибка проверки видимости окна: {e}")
+                    window_visible = False
+        except Exception as e:
+            print(f"Ошибка поиска окна Pritunl: {e}")
+
+        # Условие запуска: нет процесса ИЛИ (есть процесс, но нет видимого окна)
+        if not process_found or (process_found and not (window_found and window_visible)):
+            if process_found and not window_visible:
+                print("Процесс Pritunl найден, но окно не видимо. Перезапускаем...")
+                # Убиваем процесс если он есть но окно невидимо
+                try:
+                    subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'],
+                                   capture_output=True, text=True)
+                    time.sleep(2)  # Ждем завершения процесса
+                except Exception as e:
+                    print(f"Ошибка при завершении процесса Pritunl: {e}")
+
             print("Запускаем Pritunl...")
             subprocess.Popen([path])
+
             # Ждём появления и готовности окна
-            for _ in range(30):  # 30 секунд максимум
+            for attempt in range(30):  # 30 секунд максимум
                 time.sleep(1)
                 try:
                     app = Desktop(backend="uia").window(title_re=".*Pritunl Client.*")
-                    if app.exists() and app.is_visible():
-                        app.wait("ready", timeout=5)
-                        break
-                except:
+                    if app.exists():
+                        wrapper = app.wrapper_object()
+                        if wrapper.is_visible():
+                            app.wait("ready", timeout=5)
+                            print("Pritunl успешно запущен и готов")
+                            break
+                        else:
+                            print(f"Окно существует но не видимо, попытка {attempt + 1}/30")
+                    else:
+                        print(f"Окно не найдено, попытка {attempt + 1}/30")
+                except Exception as e:
+                    print(f"Ошибка ожидания окна, попытка {attempt + 1}/30: {e}")
                     continue
         else:
-            print("Pritunl уже запущен")
+            print("Pritunl уже запущен и окно видимо")
+
     except Exception as e:
         print(f"Ошибка при проверке/запуске Pritunl: {e}")
 
@@ -92,20 +134,6 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
         edit_box.set_text(str(code))
         print("TOTP код введён.")
 
-        # Кнопка подтверждения (Confirm/OK)
-        # btn_confirm = app.child_window(control_type="Button",
-        #                                title_re="(?i)подключиться|подтвердить|ok|confirm|Connect")
-        # if btn_confirm.exists() and btn_confirm.is_visible() and btn_confirm.is_enabled():
-        #     btn_confirm.click_input()
-        #     print("Кнопка подтверждения нажата.")
-        # else:
-        #     print("Кнопка подтверждения не найдена или недоступна.")
-
-        # time.sleep(1)  # Ждём обновления интерфейса
-
-        # Поиск контейнера Profile Connect - родителя кнопок Connect
-        # Ищем окно-диалог с title или auto_id Profile Connect
-
         profile_connect_dialog = app.child_window(title_re=".*Profile Connect.*", control_type="Window")
         if not profile_connect_dialog.exists():
             # Альтернативно ищем Custom или GroupBox с названием Profile Connect
@@ -136,7 +164,7 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
         return False
 
 
-def vpn_connect_check(ip, attempts=3, interval=0.5):
+def vpn_connect_check(ip, attempts=2, interval=0.5):
     """
     Пингует IP-адрес с заданным количеством попыток и интервалом.
 
@@ -167,11 +195,8 @@ def vpn_connect_check(ip, attempts=3, interval=0.5):
     return False
 
 
-def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=10):
+def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=3):
     """
-    Ждёт подключения к VPN, пингует ip каждые ping_interval секунд.
-    Если с 5-й попытки пинг не успешен, вызывает input_2fa_func (максимум max_attempts раз).
-
     :param ip: IP-адрес для пинга
     :param totp_code: код двухфакторки
     :param max_attempts: максимальное число повторных вводов 2FA
@@ -208,11 +233,6 @@ def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, m
 
 
 def get_first_tap_adapter():
-    # try:
-    #     import ifaddr
-    # except ImportError:
-    #     print("Установите библиотеку ifaddr: pip install ifaddr")
-    #     return
 
     adapters = ifaddr.get_adapters()
     tap_adapters = []
