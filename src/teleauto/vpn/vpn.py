@@ -1,8 +1,9 @@
-﻿import ipaddress
+﻿# import ipaddress
 import time
 import subprocess
-
-import ifaddr
+import psutil
+import socket
+# import ifaddr
 from pywinauto import Desktop
 
 
@@ -195,73 +196,110 @@ def vpn_connect_check(ip, attempts=2, interval=0.5):
     return False
 
 
-def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=3):
-    """
-    :param ip: IP-адрес для пинга
-    :param totp_code: код двухфакторки
-    :param max_attempts: максимальное число повторных вводов 2FA
-    :param ping_interval: интервал пинга в секундах
-    :param max_pings: число пингов для проверки перед повтором 2FA
-    """
+# # def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=3):
+#     """
+#     :param ip: IP-адрес для пинга
+#     :param totp_code: код двухфакторки
+#     :param max_attempts: максимальное число повторных вводов 2FA
+#     :param ping_interval: интервал пинга в секундах
+#     :param max_pings: число пингов для проверки перед повтором 2FA
+#     """
+#
+#     attempt = 0
+#     while attempt < max_attempts:
+#         ping_fail_count = 0
+#         for i in range(max_pings):
+#             # Пинг ip один раз
+#             result = subprocess.run(["ping", "-n", "1", "-w", "1000", ip], stdout=subprocess.PIPE,
+#                                     stderr=subprocess.PIPE, text=True)
+#             if "TTL=" in result.stdout:
+#                 print(f"Ping {ip} успешен.")
+#                 return True
+#             else:
+#                 print(f"Ping {ip} неудачен. Попытка {i + 1} из {max_pings}.")
+#                 ping_fail_count += 1
+#             time.sleep(ping_interval)
+#
+#         if ping_fail_count == max_pings:
+#             print(f"Пинг не удался {max_pings} раз. Повтор ввода 2FA кода. Попытка {attempt + 1} из {max_attempts}.")
+#
+#             click_pritunl_connect()
+#             input_2fa_code_and_reconnect(totp_code)
+#             time.sleep(5)
+#             ip = get_first_tap_adapter()
+#         attempt += 1
+#
+#     print("Максимальное число попыток ввода 2FA исчерпано. Подключение не установлено.")
+#     return False
 
-    attempt = 0
-    while attempt < max_attempts:
-        ping_fail_count = 0
-        for i in range(max_pings):
-            # Пинг ip один раз
-            result = subprocess.run(["ping", "-n", "1", "-w", "1000", ip], stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, text=True)
-            if "TTL=" in result.stdout:
-                print(f"Ping {ip} успешен.")
-                return True
-            else:
-                print(f"Ping {ip} неудачен. Попытка {i + 1} из {max_pings}.")
-                ping_fail_count += 1
-            time.sleep(ping_interval)
+def find_adapters_by_keyword(keyword_list):
+    addrs = psutil.net_if_addrs()
+    stats = psutil.net_if_stats()
+    found_adapters = []
+    for adapter in addrs.keys():
+        for kw in keyword_list:
+            if kw.lower() in adapter.lower():
+                found_adapters.append(adapter)
+                break
+    return found_adapters
 
-        if ping_fail_count == max_pings:
-            print(f"Пинг не удался {max_pings} раз. Повтор ввода 2FA кода. Попытка {attempt + 1} из {max_attempts}.")
+def check_adapters_status(adapter_names):
+    stats = psutil.net_if_stats()
+    addrs = psutil.net_if_addrs()
+    results = {}
+    for adapter in adapter_names:
+        if adapter not in stats:
+            results[adapter] = "Not found"
+            continue
+        stat = stats[adapter]
+        is_up = stat.isup
+        has_valid_ip = False
+        for addr in addrs.get(adapter, []):
+            if addr.family == socket.AF_INET and not addr.address.startswith("169.254"):
+                has_valid_ip = True
+                break
+        if is_up and has_valid_ip:
+            results[adapter] = "Connected"
+        else:
+            results[adapter] = "Disconnected"
+    return results
 
-            click_pritunl_connect()
-            input_2fa_code_and_reconnect(totp_code)
-            time.sleep(5)
-            ip = get_first_tap_adapter()
-        attempt += 1
+def check_vpn_connection():
+    keywords = ["TAP-Windows Adapter V9", "Pritunl"]  # шаблоны адаптеров VPN
+    adapters = find_adapters_by_keyword(keywords)
+    status = check_adapters_status(adapters)
+    return any(state == "Connected" for state in status.values())
 
-    print("Максимальное число попыток ввода 2FA исчерпано. Подключение не установлено.")
-    return False
-
-
-def get_first_tap_adapter():
-
-    adapters = ifaddr.get_adapters()
-    tap_adapters = []
-
-    # Собираем все TAP-Windows Adapter V9
-    for adapter in adapters:
-        adapter_name = adapter.nice_name
-
-        if "TAP-Windows Adapter V9" in adapter_name:
-            for ip in adapter.ips:
-                try:
-                    ip_obj = ipaddress.ip_address(ip.ip)
-                    if isinstance(ip_obj, ipaddress.IPv4Address):
-                        tap_adapters.append((adapter_name, ip.ip))
-                        break
-                except ValueError:
-                    continue
-
-    # Находим первый (без номера или с наименьшим номером)
-    if tap_adapters:
-        # Сортируем: сначала без номера, потом по номеру
-        tap_adapters.sort(key=lambda x: (
-            '#' in x[0],  # Сначала без #
-            int(x[0].split('#')[1]) if '#' in x[0] else 0  # Потом по номеру
-        ))
-
-        first_adapter = tap_adapters[0]
-        print(first_adapter[1])
-        return first_adapter[1]
-
-    print("TAP-Windows Adapter V9 не найден")
-    return None
+# # def get_first_tap_adapter():
+#
+#     adapters = ifaddr.get_adapters()
+#     tap_adapters = []
+#
+#     # Собираем все TAP-Windows Adapter V9
+#     for adapter in adapters:
+#         adapter_name = adapter.nice_name
+#
+#         if "TAP-Windows Adapter V9" in adapter_name:
+#             for ip in adapter.ips:
+#                 try:
+#                     ip_obj = ipaddress.ip_address(ip.ip)
+#                     if isinstance(ip_obj, ipaddress.IPv4Address):
+#                         tap_adapters.append((adapter_name, ip.ip))
+#                         break
+#                 except ValueError:
+#                     continue
+#
+#     # Находим первый (без номера или с наименьшим номером)
+#     if tap_adapters:
+#         # Сортируем: сначала без номера, потом по номеру
+#         tap_adapters.sort(key=lambda x: (
+#             '#' in x[0],  # Сначала без #
+#             int(x[0].split('#')[1]) if '#' in x[0] else 0  # Потом по номеру
+#         ))
+#
+#         first_adapter = tap_adapters[0]
+#         print(first_adapter[1])
+#         return first_adapter[1]
+#
+#     print("TAP-Windows Adapter V9 не найден")
+#     return None
