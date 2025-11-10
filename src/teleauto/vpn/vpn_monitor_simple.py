@@ -1,10 +1,12 @@
 import time
 import threading
-import ntplib
-import pyotp
+# import ntplib  <- Удалено
+# import pyotp   <- Удалено
 from . import vpn
 from src.teleauto.network.network_utils import wait_for_internet
-
+# --- Добавлено: ---
+from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
+# --------------------
 
 class SimpleVPNMonitor:
     def __init__(self, pin_code=None, secret_2fa=None):
@@ -17,33 +19,9 @@ class SimpleVPNMonitor:
 
         print("VPN Monitor (Simple) инициализирован")
 
-    def check_time_drift(self, max_drift_seconds=5):
-        client = ntplib.NTPClient()
-        try:
-            response = client.request('time.windows.com', version=3)
-            internet_time = response.tx_time
-            system_time = time.time()
-            drift = abs(system_time - internet_time)
-            if drift > max_drift_seconds:
-                print(f"Внимание! Системное время отличается от реального на {drift:.2f} секунд.")
-                print("Рекомендуется синхронизировать время на компьютере.")
-                return False, internet_time
-            return True, internet_time
-        except Exception as e:
-            print(f"Ошибка проверки времени через NTP: {e}")
-            # Не блокируем работу если нет доступа к NTP
-            return True, time.time()
+    # --- Метод check_time_drift(self, ...) удален ---
 
-    def get_current_totp(self, secret=None, offset_seconds=0, interval=30, ntp_time=None):
-        secret_key = secret if secret is not None else self.totp_secret
-        if not secret_key:
-            return None
-        totp = pyotp.TOTP(secret_key, interval=interval)
-        if ntp_time is None:
-            current_time = time.time() + offset_seconds
-        else:
-            current_time = ntp_time + offset_seconds
-        return totp.at(current_time)
+    # --- Метод get_current_totp(self, ...) удален ---
 
     def check_vpn_connection(self):
         """Проверяем состояние VPN подключения через обновленную функцию"""
@@ -62,11 +40,13 @@ class SimpleVPNMonitor:
         try:
             vpn.start_pritunl()
 
-            time_ok, ntp_time = self.check_time_drift()
+            # --- Изменено (убран self.): ---
+            time_ok, ntp_time = check_time_drift()
             if not time_ok:
                 input("Исправьте системное время и нажмите Enter для продолжения...")
 
-            totp_code = self.get_current_totp(ntp_time=ntp_time)
+            # --- Изменено (убран self. и добавлен self.totp_secret): ---
+            totp_code = get_current_totp(self.totp_secret, ntp_time=ntp_time)
 
             if not totp_code:
                 print("Не удалось получить TOTP код")
