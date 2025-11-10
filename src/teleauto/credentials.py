@@ -36,7 +36,7 @@ def decrypt_data(token: str, key: bytes) -> str:
     decrypted = f.decrypt(token.encode())
     return decrypted.decode()
 
-def save_credentials(username, password, pin, secret_2fa):
+def save_credentials(username, password, pin, secret_2fa, start_telemart_flag=False):
     if pin:
         salt = os.urandom(16)
         key = derive_key(pin, salt)
@@ -49,7 +49,8 @@ def save_credentials(username, password, pin, secret_2fa):
             "password": enc_password,
             "secret_2fa": enc_secret_2fa,
             "pin_hash": pin_hash,
-            "salt": base64.b64encode(salt).decode()
+            "salt": base64.b64encode(salt).decode(),
+            "start_telemart": start_telemart_flag
         }
     else:
         data = {
@@ -57,7 +58,8 @@ def save_credentials(username, password, pin, secret_2fa):
             "password": password,
             "secret_2fa": secret_2fa,
             "pin_hash": None,
-            "salt": None
+            "salt": None,
+            "start_telemart": start_telemart_flag
         }
     with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
@@ -72,6 +74,7 @@ def input_credentials():
     username = input("Логин: ")
     password = input("Пароль: ")
     secret_2fa = input("Введите секрет 2FA (BASE32): ").strip()
+    start_telemart_flag = input("Запускать Telemart Client после подключения? (y/n): ").lower() == "y"
     pin = input("Установить PIN-код? Оставьте пустым — без PIN: ").strip()
     if pin:
         pin_confirm = input("Подтвердите PIN-код: ").strip()
@@ -80,9 +83,9 @@ def input_credentials():
             return input_credentials()
     else:
         pin = None
-    save_credentials(username, password, pin, secret_2fa)
+    save_credentials(username, password, pin, secret_2fa, start_telemart_flag)
     print("Данные сохранены.")
-    return username, password, pin, secret_2fa
+    return username, password, pin, secret_2fa, start_telemart_flag
 
 def verify_pin(stored_pin_hash, entered_pin):
     if stored_pin_hash is None:
@@ -97,7 +100,8 @@ def decrypt_credentials(creds, pin):
             username = decrypt_data(creds["username"], key)
             password = decrypt_data(creds["password"], key)
             secret_2fa = decrypt_data(creds["secret_2fa"], key)
-            return username, password, secret_2fa
+            start_telemart_flag = creds.get("start_telemart", False)
+            return username, password, secret_2fa, start_telemart_flag
         except Exception:
             raise ValueError("Неверный PIN-код или повреждены данные.")
     else:
