@@ -1,10 +1,12 @@
 import time
 import threading
+import ntplib
 import pyotp
 from . import vpn
+from src.teleauto.network.network_utils import wait_for_internet
 
 
-class VPNMonitorSimple:
+class SimpleVPNMonitor:
     def __init__(self, pin_code=None, secret_2fa=None):
         self.running = False
         self.connected = False
@@ -15,39 +17,64 @@ class VPNMonitorSimple:
 
         print("VPN Monitor (Simple) инициализирован")
 
-    def get_current_totp(self, offset_seconds=40, interval=30):
-        """Генерация TOTP кода"""
-        if not self.totp_secret:
+    def check_time_drift(self, max_drift_seconds=5):
+        client = ntplib.NTPClient()
+        try:
+            response = client.request('time.windows.com', version=3)
+            internet_time = response.tx_time
+            system_time = time.time()
+            drift = abs(system_time - internet_time)
+            if drift > max_drift_seconds:
+                print(f"Внимание! Системное время отличается от реального на {drift:.2f} секунд.")
+                print("Рекомендуется синхронизировать время на компьютере.")
+                return False, internet_time
+            return True, internet_time
+        except Exception as e:
+            print(f"Ошибка проверки времени через NTP: {e}")
+            # Не блокируем работу если нет доступа к NTP
+            return True, time.time()
+
+    def get_current_totp(self, secret=None, offset_seconds=0, interval=30, ntp_time=None):
+        secret_key = secret if secret is not None else self.totp_secret
+        if not secret_key:
             return None
-        totp = pyotp.TOTP(self.totp_secret, interval=interval)
-        current_time = time.time() + offset_seconds
+        totp = pyotp.TOTP(secret_key, interval=interval)
+        if ntp_time is None:
+            current_time = time.time() + offset_seconds
+        else:
+            current_time = ntp_time + offset_seconds
         return totp.at(current_time)
 
     def check_vpn_connection(self):
-        """Проверяем состояние VPN подключения"""
+        """Проверяем состояние VPN подключения через обновленную функцию"""
         try:
-            ip = vpn.get_first_tap_adapter()
-            if ip and not ip.startswith("169.254"):
-                return vpn.vpn_connect_check(ip, attempts=1, interval=0.5)
-            return False
+            return vpn.check_vpn_connection()
         except Exception as e:
             print(f"Ошибка проверки VPN: {e}")
             return False
 
     def reconnect_vpn(self):
         """Переподключение к VPN"""
+        print("Проверяем статус подключения к интернету...")
+        wait_for_internet()
+
         print("Переподключение к VPN...")
         try:
             vpn.start_pritunl()
 
-            totp_code = self.get_current_totp()
+            time_ok, ntp_time = self.check_time_drift()
+            if not time_ok:
+                input("Исправьте системное время и нажмите Enter для продолжения...")
+
+            totp_code = self.get_current_totp(ntp_time=ntp_time)
+
             if not totp_code:
                 print("Не удалось получить TOTP код")
                 return False
 
             if vpn.click_pritunl_connect():
                 if vpn.input_2fa_code_and_reconnect(totp_code):
-                    print("VPN переподключен успешно")
+                    print("Восстановление соединения VPN началось...")
                     return True
             return False
         except Exception as e:
