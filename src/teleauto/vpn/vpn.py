@@ -1,10 +1,10 @@
-﻿# import ipaddress
+﻿# src/teleauto/vpn/vpn.py
 import time
 import subprocess
 import psutil
 import socket
-# import ifaddr
 from pywinauto import Desktop
+from pywinauto.findwindows import ElementNotFoundError
 
 
 def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
@@ -20,7 +20,6 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
             spec = Desktop(backend="uia").window(title_re=r".*Pritunl Client.*")
             window_found = spec.exists()
             if window_found:
-                # Проверяем видимость окна
                 try:
                     wrapper = spec.wrapper_object()
                     window_visible = wrapper.is_visible()
@@ -31,23 +30,20 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
         except Exception as e:
             print(f"Ошибка поиска окна Pritunl: {e}")
 
-        # Условие запуска: нет процесса ИЛИ (есть процесс, но нет видимого окна)
         if not process_found or (process_found and not (window_found and window_visible)):
             if process_found and not window_visible:
                 print("Процесс Pritunl найден, но окно не видимо. Перезапускаем...")
-                # Убиваем процесс если он есть но окно невидимо
                 try:
                     subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'],
                                    capture_output=True, text=True)
-                    time.sleep(2)  # Ждем завершения процесса
+                    time.sleep(2)
                 except Exception as e:
                     print(f"Ошибка при завершении процесса Pritunl: {e}")
 
             print("Запускаем Pritunl...")
             subprocess.Popen([path])
 
-            # Ждём появления и готовности окна
-            for attempt in range(30):  # 30 секунд максимум
+            for attempt in range(30):
                 time.sleep(1)
                 try:
                     app = Desktop(backend="uia").window(title_re=".*Pritunl Client.*")
@@ -71,166 +67,192 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
         print(f"Ошибка при проверке/запуске Pritunl: {e}")
 
 
-def connect_vpn():
-    try:
-        print("Подключаемся к VPN через pritunl CLI...")
-        proc = subprocess.Popen(["pritunl", "connect"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return proc
-    except Exception as e:
-        print(f"Ошибка при запуске 'pritunl connect': {e}")
-        return None
-
-
-def click_pritunl_connect(window_title_re=".*Pritunl Client.*"):
+def click_pritunl_connect(profile_index=0, window_title_re=".*Pritunl Client.*"):
+    """
+    Нажимает кнопку "Connect" для ВЫБРАННОГО профиля.
+    (Ищет ВСЕ кнопки и фильтрует в Python)
+    """
     try:
         app = Desktop(backend="uia").window(title_re=window_title_re)
         app.wait("exists ready visible enabled", timeout=30)
         app.set_focus()
 
-        # Ждем появления кнопок Connect с повторными попытками
-        for attempt in range(10):  # 10 попыток с интервалом 1 сек
-            buttons = app.descendants(control_type="Button")
-            connect_buttons = []
+        for attempt in range(10):
+            time.sleep(1)
 
-            for btn in buttons:
+            try:
+                all_buttons = app.descendants(control_type="Button")
+            except ElementNotFoundError:
+                print(f"Кнопки (control_type='Button') не найдены, попытка {attempt + 1}/10")
+                continue
+
+            filtered_buttons = []
+            for btn in all_buttons:
                 try:
-                    text = btn.window_text().lower()
-                    if "connect" in text and btn.is_visible() and btn.is_enabled():
-                        connect_buttons.append(btn)
+                    btn_name = btn.window_text()
+                    if not (btn_name and btn_name.endswith("Connect")):
+                        continue
+
+                    if not (btn.is_visible() and btn.is_enabled()):
+                        continue
+
+                    parent = btn.parent()
+                    parent_text = ""
+                    if parent:
+                        try:
+                            parent_text = parent.window_text().lower()
+                        except Exception:
+                            pass
+
+                    if parent_text and "profile connect" in parent_text:
+                        continue
+
+                    filtered_buttons.append(btn)
                 except Exception:
                     continue
 
-            if connect_buttons:
-                # Найдена хотя бы одна кнопка Connect
-                btn = connect_buttons[0]
-                rect = btn.rectangle()
-                x = (rect.left + rect.right) // 2
-                y = (rect.top + rect.bottom) // 2
-                btn.click_input(coords=(x - rect.left, y - rect.top))
-                print("Кнопка Connect нажата.")
+            if filtered_buttons:
+                if not (0 <= profile_index < len(filtered_buttons)):
+                    print(
+                        f"Ошибка: Индекс профиля {profile_index} вне диапазона. Найдено {len(filtered_buttons)} кнопок.")
+                    print("Возможно, в Pritunl меньше профилей, чем вы указали.")
+                    return False
+
+                btn = filtered_buttons[profile_index]
+                btn.click_input()
+                print(f"Кнопка 'Connect' для профиля #{profile_index + 1} нажата.")
                 return True
             else:
-                print(f"Кнопки Connect не найдены, попытка {attempt + 1}/10")
-                time.sleep(1)
+                print(f"Подходящие кнопки '...Connect' не найдены, попытка {attempt + 1}/10")
 
-        print("Кнопка Connect не найдена после всех попыток.")
+        print("Кнопка 'Connect' не найдена после всех попыток.")
         return False
 
     except Exception as e:
-        print(f"Ошибка при нажатии кнопки Connect: {e}")
+        print(f"Ошибка при нажатии кнопки 'Connect': {e}")
         return False
 
 
 def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
+    """
+    Надежный ввод 2FA. Нажимает ПОСЛЕДНЮЮ активную кнопку 'Connect'
+    после ввода 2FA кода.
+    """
     try:
-        app = Desktop(backend="uia").window(title_re=window_title_re, control_type="Pane")
+        app = Desktop(backend="uia").window(title_re=window_title_re)
         app.wait("exists ready", timeout=15)
         app.set_focus()
 
-        # Поле ввода TOTP
-        edit_box = app.child_window(control_type="Edit")
-        if not edit_box.exists() or not edit_box.is_visible() or not edit_box.is_enabled():
-            print("Поле ввода кода не найдено или недоступно.")
-            return False
-        edit_box.set_text(str(code))
-        print("TOTP код введён.")
-
-        profile_connect_dialog = app.child_window(title_re=".*Profile Connect.*", control_type="Window")
-        if not profile_connect_dialog.exists():
-            # Альтернативно ищем Custom или GroupBox с названием Profile Connect
-            profile_connect_dialog = app.child_window(title_re=".*Profile Connect.*", control_type="Custom")
-        if not profile_connect_dialog.exists():
-            print("Контейнер Profile Connect не найден, ищем кнопки по стандарту.")
-
-        container = profile_connect_dialog if profile_connect_dialog.exists() else edit_box.parent()
-        buttons = container.children(control_type="Button")
-
-        connect_buttons = [btn for btn in buttons if
-                           "connect" in btn.window_text().lower() and btn.is_visible() and btn.is_enabled()]
-
-        if len(connect_buttons) >= 2:
-            connect_buttons[1].click_input()
-            print("Вторая кнопка Connect в Profile Connect нажата.")
+        edit_box = None
+        try:
+            edit_box = app.child_window(control_type="Edit")
+            edit_box.wait("exists ready visible enabled", timeout=10)
+            edit_box.set_text(str(code))
+            print("TOTP код введён.")
+        except (ElementNotFoundError, RuntimeError):
+            print("Поле ввода 2FA кода не появилось. (Возможно, не требуется).")
             return True
-        elif len(connect_buttons) == 1:
-            connect_buttons[0].click_input()
-            print("Найдена только одна кнопка Connect в контейнере, она нажата.")
-            return True
-        else:
-            print("Кнопка Connect в контейнере не найдена.")
+
+        time.sleep(0.5)
+
+        connect_button = None
+        for attempt in range(5):
+            try:
+                all_buttons = app.descendants(control_type="Button")
+                active_connect_buttons = []
+
+                for btn in all_buttons:
+                    btn_name = btn.window_text()
+                    if btn_name and btn_name.endswith("Connect"):
+                        if btn.is_visible() and btn.is_enabled():
+                            active_connect_buttons.append(btn)
+
+                if active_connect_buttons:
+                    connect_button = active_connect_buttons[-1]
+                    break
+                else:
+                    print(f"Активная кнопка 'Connect' (в 2FA) не найдена, попытка {attempt + 1}/5")
+                    time.sleep(1)
+
+            except Exception as e:
+                print(f"Ошибка при поиске кнопок 2FA: {e}")
+                time.sleep(1)
+
+        if not connect_button:
+            print("Не удалось найти *активную* кнопку 'Connect' в диалоге 2FA.")
             return False
+
+        connect_button.click_input()
+        print("Кнопка 'Connect' в диалоге 2FA (последняя активная) нажата.")
+        return True
 
     except Exception as e:
-        print(f"Ошибка при вводе 2FA и повторном нажатии Connect: {e}")
+        print(f"Критическая ошибка при вводе 2FA: {e}")
         return False
 
 
-def vpn_connect_check(ip, attempts=2, interval=0.5):
+# --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
+def disconnect_vpn(window_title_re=".*Pritunl Client.*"):
     """
-    Пингует IP-адрес с заданным количеством попыток и интервалом.
-
-    :param ip: IP-адрес для пинга
-    :param attempts: количество попыток (по умолчанию 3)
-    :param interval: интервал между попытками в секундах (по умолчанию 1)
-    :return: True если хотя бы один пинг успешен, False если все неудачны
+    Находит и нажимает АКТИВНУЮ кнопку 'Disconnect'.
+    Сначала проверяет, видимо ли окно, и перезапускает, если нужно.
     """
+    try:
+        # 1. УБЕДИМСЯ, ЧТО ОКНО ЗАПУЩЕНО И ВИДИМО
+        print("Проверка окна Pritunl перед отключением...")
+        start_pritunl()  # Эта функция перезапустит Pritunl, если он невидимый
 
-    for attempt in range(1, attempts + 1):
+        # 2. ТЕПЕРЬ ИЩЕМ КНОПКУ
+        app = Desktop(backend="uia").window(title_re=window_title_re)
+        app.wait("exists ready visible", timeout=15)
+        app.set_focus()
 
-        result = subprocess.run(
-            ["ping", "-n", "1", "-w", "1000", ip],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        disconnect_button = None
+        for attempt in range(5):  # Ищем 5 сек
+            try:
+                all_buttons = app.descendants(control_type="Button")
+                for btn in all_buttons:
+                    btn_name = btn.window_text()
+                    if btn_name and btn_name.endswith("Disconnect"):
+                        if btn.is_visible() and btn.is_enabled():
+                            disconnect_button = btn
+                            break
+                if disconnect_button:
+                    break
+                else:
+                    print(f"Активная кнопка 'Disconnect' не найдена, попытка {attempt + 1}/5")
+                    time.sleep(1)
+            except Exception as e:
+                print(f"Ошибка поиска кнопки Disconnect: {e}")
+                time.sleep(1)
 
-        if "TTL=" in result.stdout:
-            print(f"Ping {ip} успешен.")
+        if disconnect_button:
+            disconnect_button.click_input()
+            print("Кнопка 'Disconnect' нажата.")
             return True
         else:
-            print(f"Ping {ip} неудачен.")
-            if attempt < attempts:
-                time.sleep(interval)
+            print("Активная кнопка 'Disconnect' не найдена.")
+            return False
 
-    print(f"Все {attempts} попытки пинга {ip} неудачны.")
-    return False
+    except Exception as e:
+        print(f"Ошибка при нажатии 'Disconnect': {e}")
+        return False
 
 
-# # def vpn_connect_with_retries(ip, totp_code, max_attempts=3, ping_interval=0.5, max_pings=3):
-#     """
-#     :param ip: IP-адрес для пинга
-#     :param totp_code: код двухфакторки
-#     :param max_attempts: максимальное число повторных вводов 2FA
-#     :param ping_interval: интервал пинга в секундах
-#     :param max_pings: число пингов для проверки перед повтором 2FA
-#     """
-#
-#     attempt = 0
-#     while attempt < max_attempts:
-#         ping_fail_count = 0
-#         for i in range(max_pings):
-#             # Пинг ip один раз
-#             result = subprocess.run(["ping", "-n", "1", "-w", "1000", ip], stdout=subprocess.PIPE,
-#                                     stderr=subprocess.PIPE, text=True)
-#             if "TTL=" in result.stdout:
-#                 print(f"Ping {ip} успешен.")
-#                 return True
-#             else:
-#                 print(f"Ping {ip} неудачен. Попытка {i + 1} из {max_pings}.")
-#                 ping_fail_count += 1
-#             time.sleep(ping_interval)
-#
-#         if ping_fail_count == max_pings:
-#             print(f"Пинг не удался {max_pings} раз. Повтор ввода 2FA кода. Попытка {attempt + 1} из {max_attempts}.")
-#
-#             click_pritunl_connect()
-#             input_2fa_code_and_reconnect(totp_code)
-#             time.sleep(5)
-#             ip = get_first_tap_adapter()
-#         attempt += 1
-#
-#     print("Максимальное число попыток ввода 2FA исчерпано. Подключение не установлено.")
-#     return False
+def wait_for_disconnect(timeout_sec=30):
+    """
+    Ждет, пока check_vpn_connection не вернет False.
+    """
+    print("Ожидание отключения сетевых адаптеров...")
+    start_time = time.time()
+    while check_vpn_connection():
+        if time.time() - start_time > timeout_sec:
+            print(f"Ошибка: Адаптеры не отключились за {timeout_sec} сек.")
+            return False
+        time.sleep(0.5)
+    print("Сетевые адаптеры отключены.")
+    return True
+
 
 def find_adapters_by_keyword(keyword_list):
     addrs = psutil.net_if_addrs()
@@ -242,6 +264,7 @@ def find_adapters_by_keyword(keyword_list):
                 found_adapters.append(adapter)
                 break
     return found_adapters
+
 
 def check_adapters_status(adapter_names):
     stats = psutil.net_if_stats()
@@ -264,42 +287,9 @@ def check_adapters_status(adapter_names):
             results[adapter] = "Disconnected"
     return results
 
+
 def check_vpn_connection():
-    keywords = ["TAP-Windows Adapter V9", "Pritunl"]  # шаблоны адаптеров VPN
+    keywords = ["TAP-Windows Adapter V9", "Pritunl"]
     adapters = find_adapters_by_keyword(keywords)
     status = check_adapters_status(adapters)
     return any(state == "Connected" for state in status.values())
-
-# # def get_first_tap_adapter():
-#
-#     adapters = ifaddr.get_adapters()
-#     tap_adapters = []
-#
-#     # Собираем все TAP-Windows Adapter V9
-#     for adapter in adapters:
-#         adapter_name = adapter.nice_name
-#
-#         if "TAP-Windows Adapter V9" in adapter_name:
-#             for ip in adapter.ips:
-#                 try:
-#                     ip_obj = ipaddress.ip_address(ip.ip)
-#                     if isinstance(ip_obj, ipaddress.IPv4Address):
-#                         tap_adapters.append((adapter_name, ip.ip))
-#                         break
-#                 except ValueError:
-#                     continue
-#
-#     # Находим первый (без номера или с наименьшим номером)
-#     if tap_adapters:
-#         # Сортируем: сначала без номера, потом по номеру
-#         tap_adapters.sort(key=lambda x: (
-#             '#' in x[0],  # Сначала без #
-#             int(x[0].split('#')[1]) if '#' in x[0] else 0  # Потом по номеру
-#         ))
-#
-#         first_adapter = tap_adapters[0]
-#         print(first_adapter[1])
-#         return first_adapter[1]
-#
-#     print("TAP-Windows Adapter V9 не найден")
-#     return None
