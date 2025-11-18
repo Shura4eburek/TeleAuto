@@ -4,7 +4,6 @@ import threading
 import sys
 import os
 import time
-import json
 from tkinter import messagebox
 
 # --- Импортируем всю вашу логику ---
@@ -213,7 +212,7 @@ class MainWindow(ctk.CTkFrame):
                                                                                                        sticky="w")
         self.telemart_status = ctk.CTkLabel(self.status_frame, textvariable=self.master_app.telemart_status_var)
         self.telemart_status.grid(row=0, column=1, padx=5, pady=10, sticky="w")
-        self.start_telemart_button = ctk.CTkButton(self.status_frame, text="Start", width=120, state="disabled",
+        self.start_telemart_button = ctk.CTkButton(self.status_frame, text="Start", width=125, state="disabled",
                                                    command=self.master_app.on_start_telemart_click)
         self.start_telemart_button.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
@@ -244,8 +243,8 @@ class MainWindow(ctk.CTkFrame):
         self.monitor_status = ctk.CTkLabel(self.status_frame, textvariable=self.master_app.monitor_status_var)
         self.monitor_status.grid(row=2, column=1, padx=5, pady=10, sticky="w")
 
-        self.disconnect_button = ctk.CTkButton(self.status_frame, text="Disconnect", width=120, state="disabled",
-                                               fg_color="gray", command=self.master_app.on_disconnect_click)
+        self.disconnect_button = ctk.CTkButton(self.status_frame, text="Disconnect", width=125, state="disabled",
+                                               fg_color="grey", command=self.master_app.on_disconnect_click)
         self.disconnect_button.grid(row=2, column=2, padx=10, pady=10, sticky="e")
 
         # --- Лог (скрыт) ---
