@@ -23,7 +23,6 @@ def start_telemart(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClien
         if not (process_found or window_found):
             print("Запускаем Telemart Client...")
             subprocess.Popen([path])
-            time.sleep(5)
             print("Telemart Client успешно запущен")
         else:
             print("Telemart.Client уже запущен")
