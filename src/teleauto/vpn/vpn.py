@@ -247,7 +247,7 @@ def wait_for_disconnect(timeout_sec=30):
     start_time = time.time()
     while check_vpn_connection():
         if time.time() - start_time > timeout_sec:
-            print(f"Ошибка: Адаптеры не отключились за {timeout_sec} сек.")
+            print(f"Ошибка: Адаптеры не отключились за {timeout_sec} сек. Отключитесь от VPN вручную. Так же расширьте окно вниз, что бы кнопка была видима.")
             return False
         time.sleep(0.5)
     print("Сетевые адаптеры отключены.")
