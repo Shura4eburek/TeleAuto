@@ -5,9 +5,9 @@ import sys
 import os
 import time
 from tkinter import messagebox
+from PIL import Image, ImageDraw
 
-# --- Импортируем всю вашу логику ---
-# Убедимся, что Python видит папку 'src'
+# --- Импорт логики ---
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 try:
@@ -22,12 +22,129 @@ try:
     from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
 except ImportError as e:
     print(f"Ошибка импорта: {e}")
-    print("Убедитесь, что вы запускаете gui.py из корня проекта")
-    print("и что папка 'src' существует и содержит все модули.")
     sys.exit(1)
 
+# === КОНСТАНТЫ ДИЗАЙНА ===
+ROW_HEIGHT = 35
+CORNER_RADIUS = 6
 
-# --- Класс для перенаправления print в GUI ---
+
+# --- Виджет Светодиода (Сглаженный через PIL) ---
+class LEDCircle(ctk.CTkLabel):
+    def __init__(self, master, size=15, fg_color="transparent", **kwargs):
+        super().__init__(master, text="", width=size, height=size, fg_color=fg_color, **kwargs)
+        self.size = size
+
+        # Цвета
+        self.colors = {
+            "off": "#151515",
+            "shadow": "#111111",
+            "working": "#FFD700",
+            "working_dim": "#8B7500",
+            "success": "#00DD00",
+            "error": "#FF4444"
+        }
+
+        self._state = "off"
+        self._blink_job = None
+        self._blink_state = False
+
+        # Кэш для изображений
+        self._images = {}
+
+        # Генерируем состояния
+        for k, c in self.colors.items():
+            if k != "shadow":
+                self._images[k] = self._draw_circle(c)
+
+        # Устанавливаем начальное состояние
+        self.set_state("off")
+
+    def _draw_circle(self, color):
+        """Рисует сглаженный круг через PIL"""
+        scale = 4  # Супер-сэмплинг
+        s = int(self.size * scale)
+        pad = int(4 * scale)
+
+        image = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+
+        # Тень
+        draw.ellipse((0, 0, s - 1, s - 1), fill=self.colors["shadow"])
+        # Огонек
+        draw.ellipse((pad, pad, s - pad - 1, s - pad - 1), fill=color)
+
+        # Сглаживание
+        image = image.resize((self.size, self.size), Image.Resampling.LANCZOS)
+
+        return ctk.CTkImage(light_image=image, dark_image=image, size=(self.size, self.size))
+
+    def start_blinking(self):
+        if self._blink_job is None: self._blink_loop()
+
+    def stop_blinking(self):
+        if self._blink_job:
+            self.after_cancel(self._blink_job)
+            self._blink_job = None
+
+    def _blink_loop(self):
+        key = "working" if self._blink_state else "working_dim"
+        self.configure(image=self._images[key])
+        self._blink_state = not self._blink_state
+        self._blink_job = self.after(600, self._blink_loop)
+
+    def set_state(self, state):
+        self.stop_blinking()
+        self._state = state
+
+        if state == "waiting":
+            self.start_blinking()
+        else:
+            self.configure(image=self._images.get(state, self._images["off"]))
+
+
+# --- TitleBox (Название + Лампочка) ---
+class TitleBox(ctk.CTkFrame):
+    def __init__(self, master, title, **kwargs):
+        super().__init__(master, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                         fg_color="#181818", border_width=1, border_color="#333333", **kwargs)
+        self.pack_propagate(False)
+
+        # Лампочка
+        self.led = LEDCircle(self, size=15, fg_color="#181818")
+        self.led.place(x=10, rely=0.5, anchor="w")
+
+        # Текст
+        self.label = ctk.CTkLabel(self, text=title, text_color="#E0E0E0", font=ctk.CTkFont(size=13, weight="bold"))
+        self.label.place(x=33, rely=0.53, anchor="w")
+
+    def set_led(self, state):
+        self.led.set_state(state)
+
+
+# --- StatusBox (Текст статуса) ---
+class StatusBox(ctk.CTkFrame):
+    def __init__(self, master, text="Ожидание", **kwargs):
+        super().__init__(master, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                         fg_color="#181818", border_width=1, border_color="#333333", **kwargs)
+        self.pack_propagate(False)
+
+        self.label = ctk.CTkLabel(self, text=text, text_color="#777777", font=ctk.CTkFont(size=12))
+        self.label.place(relx=0.5, rely=0.53, anchor="center")
+
+    def set_text(self, text, state):
+        self.label.configure(text=text)
+        if state == "success":
+            self.label.configure(text_color="#44DD44")
+        elif state == "error":
+            self.label.configure(text_color="#FF5555")
+        elif state == "working":
+            self.label.configure(text_color="#FFD700")
+        else:
+            self.label.configure(text_color="#777777")
+
+
+# --- Logger ---
 class TextboxLogger:
     def __init__(self, textbox):
         self.textbox = textbox
@@ -49,426 +166,368 @@ class TextboxLogger:
         self.stdout.flush()
 
 
-# --- 1. Окно Конфигурации (Первый запуск) ---
+# --- Config Window ---
 class ConfigWindow(ctk.CTkToplevel):
     def __init__(self, master_app):
         super().__init__(master_app)
         self.master_app = master_app
-        self.title("Первичная настройка TeleAuto")
+        self.title("Первичная настройка")
         self.geometry("450x550")
         self.transient(master_app)
         self.grab_set()
-
         self.grid_columnconfigure(1, weight=1)
 
-        # --- Поля ---
-        ctk.CTkLabel(self, text="PIN-код (оставьте пустым, если не нужен):").grid(row=0, column=0, padx=10, pady=5,
-                                                                                  sticky="w")
+        ctk.CTkLabel(self, text="PIN-код:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
         self.pin_entry = ctk.CTkEntry(self, show="*")
         self.pin_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Повторите PIN-код:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Повторите PIN:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
         self.pin_repeat_entry = ctk.CTkEntry(self, show="*")
         self.pin_repeat_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Секрет 2FA (Профиль 1):").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Секрет 2FA (1):").grid(row=2, column=0, padx=10, pady=5, sticky="w")
         self.secret_entry_1 = ctk.CTkEntry(self, show="*")
         self.secret_entry_1.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Секрет 2FA (Профиль 2):").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Секрет 2FA (2):").grid(row=3, column=0, padx=10, pady=5, sticky="w")
         self.secret_entry_2 = ctk.CTkEntry(self, show="*")
         self.secret_entry_2.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Секрет 2FA (Профиль 3):").grid(row=4, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Секрет 2FA (3):").grid(row=4, column=0, padx=10, pady=5, sticky="w")
         self.secret_entry_3 = ctk.CTkEntry(self, show="*")
         self.secret_entry_3.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Оставьте поле 2FA пустым, если профиль не используется.",
-                     font=ctk.CTkFont(size=10)).grid(row=5, column=0, columnspan=2, padx=10, sticky="w")
+        ctk.CTkLabel(self, text="Оставьте пустым, если не используется.", font=ctk.CTkFont(size=10)).grid(row=5,
+                                                                                                          column=0,
+                                                                                                          columnspan=2,
+                                                                                                          padx=10)
 
-        ctk.CTkLabel(self, text="").grid(row=6, column=0)  # Разделитель
+        self.telemart_checkbox = ctk.CTkCheckBox(self, text="Автозапуск Telemart", command=self.toggle_login_fields)
+        self.telemart_checkbox.grid(row=7, column=0, columnspan=2, padx=10, pady=10, sticky="w")
 
-        self.telemart_checkbox = ctk.CTkCheckBox(self, text="Автозапуск Telemart Client",
-                                                 command=self.toggle_login_fields)
-        self.telemart_checkbox.grid(row=7, column=0, columnspan=2, padx=10, pady=5, sticky="w")
-
-        ctk.CTkLabel(self, text="Логин Telemart:").grid(row=8, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Логин:").grid(row=8, column=0, padx=10, pady=5, sticky="w")
         self.login_entry = ctk.CTkEntry(self)
         self.login_entry.grid(row=8, column=1, padx=10, pady=5, sticky="ew")
 
-        ctk.CTkLabel(self, text="Пароль Telemart:").grid(row=9, column=0, padx=10, pady=5, sticky="w")
+        ctk.CTkLabel(self, text="Пароль:").grid(row=9, column=0, padx=10, pady=5, sticky="w")
         self.password_entry = ctk.CTkEntry(self, show="*")
         self.password_entry.grid(row=9, column=1, padx=10, pady=5, sticky="ew")
 
-        self.save_button = ctk.CTkButton(self, text="Сохранить и продолжить", command=self.save_config)
-        self.save_button.grid(row=10, column=0, columnspan=2, padx=10, pady=20)
-
+        ctk.CTkButton(self, text="Сохранить", command=self.save_config).grid(row=10, column=0, columnspan=2, pady=20)
         self.toggle_login_fields()
         self.protocol("WM_DELETE_WINDOW", self.master_app.quit)
 
     def toggle_login_fields(self):
-        if self.telemart_checkbox.get() == 1:
-            self.login_entry.configure(state="normal")
-            self.password_entry.configure(state="normal")
-        else:
-            self.login_entry.configure(state="disabled")
-            self.password_entry.configure(state="disabled")
+        st = "normal" if self.telemart_checkbox.get() == 1 else "disabled"
+        self.login_entry.configure(state=st)
+        self.password_entry.configure(state=st)
 
     def save_config(self):
         pin = self.pin_entry.get()
-        pin_repeat = self.pin_repeat_entry.get()
-
-        secrets_list = [
-            self.secret_entry_1.get().strip(),
-            self.secret_entry_2.get().strip(),
-            self.secret_entry_3.get().strip()
-        ]
-
-        if pin != pin_repeat:
-            messagebox.showerror("Ошибка", "PIN-коды не совпадают.")
-            return
-
-        if not any(secrets_list):
-            messagebox.showerror("Ошибка", "Хотя бы один секретный ключ 2FA должен быть заполнен.")
-            return
-
-        login = self.login_entry.get()
-        password = self.password_entry.get()
-        start_telemart = self.telemart_checkbox.get() == 1
-
-        if start_telemart and (not login or not password):
-            messagebox.showerror("Ошибка", "Логин и Пароль не могут быть пустыми, если включен автозапуск Telemart.")
-            return
+        if pin != self.pin_repeat_entry.get(): return messagebox.showerror("Ошибка", "PIN не совпадают.")
+        secrets = [self.secret_entry_1.get().strip(), self.secret_entry_2.get().strip(),
+                   self.secret_entry_3.get().strip()]
+        if not any(secrets): return messagebox.showerror("Ошибка", "Нужен хотя бы один секрет.")
 
         try:
-            save_credentials(login, password, pin if pin else None, secrets_list, start_telemart)
-            self.master_app.config_saved(pin if pin else None)
+            save_credentials(self.login_entry.get(), self.password_entry.get(), pin or None, secrets,
+                             self.telemart_checkbox.get() == 1)
+            self.master_app.config_saved(pin or None)
             self.destroy()
         except Exception as e:
-            messagebox.showerror("Ошибка сохранения", f"Не удалось сохранить credentials.json:\n{e}")
+            messagebox.showerror("Ошибка", str(e))
 
 
-# --- 2. Окно ввода PIN-кода ---
+# --- Pin Window ---
 class PinWindow(ctk.CTkToplevel):
     def __init__(self, master_app):
         super().__init__(master_app)
         self.master_app = master_app
-        self.title("Введите PIN-код")
-        self.geometry("350x150")
+        self.title("Ввод PIN")
+        self.geometry("300x160")
         self.transient(master_app)
         self.grab_set()
 
-        self.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self, text="Введите PIN-код для расшифровки данных:").pack(pady=10)
+        ctk.CTkLabel(self, text="Введите ваш PIN-код:").pack(pady=(15, 5))
+
         self.pin_entry = ctk.CTkEntry(self, show="*", width=200)
         self.pin_entry.pack(pady=5)
+        self.pin_entry.bind("<Return>", self.check)
         self.pin_entry.focus()
-        self.unlock_button = ctk.CTkButton(self, text="Войти", command=self.check_pin)
-        self.unlock_button.pack(pady=10)
-        self.pin_entry.bind("<Return>", self.check_pin)
+
+        ctk.CTkButton(self, text="Войти", command=self.check).pack(pady=10)
         self.protocol("WM_DELETE_WINDOW", self.master_app.quit)
 
-    def check_pin(self, event=None):
-        pin = self.pin_entry.get()
-        creds = self.master_app.creds
+    def check(self, event=None):
+        if verify_pin(self.master_app.creds.get("pin_hash"), self.pin_entry.get()):
+            try:
+                self.master_app.pin_unlocked(decrypt_credentials(self.master_app.creds, self.pin_entry.get()))
+                self.destroy()
+            except Exception as e:
+                messagebox.showerror("Ошибка", str(e))
+        else:
+            messagebox.showerror("Ошибка", "Неверный PIN")
 
-        if not verify_pin(creds.get("pin_hash"), pin):
-            messagebox.showerror("Ошибка", "Неверный PIN-код.", parent=self)
-            return
 
+# --- Settings Window ---
+class SettingsWindow(ctk.CTkToplevel):
+    def __init__(self, master_app):
+        super().__init__(master_app)
+        self.master_app = master_app
+        self.title("Настройки")
+        self.geometry("500x600")
+        self.transient(master_app)
+        self.grab_set()
+        self.grid_columnconfigure(1, weight=1)
+
+        self.sv1 = ctk.StringVar();
+        self.sv2 = ctk.StringVar();
+        self.sv3 = ctk.StringVar()
+        self.lv = ctk.StringVar();
+        self.pv = ctk.StringVar()
+
+        self.pin_frame = ctk.CTkFrame(self)
+        self.pin_frame.grid(row=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        ctk.CTkLabel(self.pin_frame, text="PIN:").pack(side="left", padx=5)
+        self.pin_ent = ctk.CTkEntry(self.pin_frame, show="*")
+        self.pin_ent.pack(side="left", fill="x", expand=True, padx=5)
+        ctk.CTkButton(self.pin_frame, text="Разблокировать", command=self.unlock).pack(side="left", padx=5)
+
+        self.sf = ctk.CTkFrame(self)
+        self.sf.grid(row=1, columnspan=2, sticky="ew", padx=10)
+        self.sf.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.sf, text="Секрет 1:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ctk.CTkEntry(self.sf, textvariable=self.sv1, state="disabled").grid(row=0, column=1, sticky="ew", pady=5,
+                                                                            padx=5)
+
+        ctk.CTkLabel(self.sf, text="Секрет 2:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ctk.CTkEntry(self.sf, textvariable=self.sv2, state="disabled").grid(row=1, column=1, sticky="ew", pady=5,
+                                                                            padx=5)
+
+        ctk.CTkLabel(self.sf, text="Секрет 3:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        ctk.CTkEntry(self.sf, textvariable=self.sv3, state="disabled").grid(row=2, column=1, sticky="ew", pady=5,
+                                                                            padx=5)
+
+        self.cb = ctk.CTkCheckBox(self.sf, text="Автозапуск Telemart", state="disabled", command=self.upd)
+        self.cb.grid(row=4, column=0, columnspan=2, pady=15, padx=5, sticky="w")
+
+        ctk.CTkLabel(self.sf, text="Логин:").grid(row=5, column=0, padx=5, pady=5, sticky="w")
+        self.le = ctk.CTkEntry(self.sf, textvariable=self.lv, state="disabled")
+        self.le.grid(row=5, column=1, sticky="ew", pady=5, padx=5)
+
+        ctk.CTkLabel(self.sf, text="Пароль:").grid(row=6, column=0, padx=5, pady=5, sticky="w")
+        self.pe = ctk.CTkEntry(self.sf, textvariable=self.pv, show="*", state="disabled")
+        self.pe.grid(row=6, column=1, sticky="ew", pady=5, padx=5)
+
+        self.save_btn = ctk.CTkButton(self, text="Сохранить изменения", state="disabled", command=self.save)
+        self.save_btn.grid(row=2, columnspan=2, pady=20)
+
+        ctk.CTkButton(self, text="Удалить все данные", fg_color="#D00", hover_color="#A00", command=self.delete).grid(
+            row=3, columnspan=2)
+
+        if self.master_app.creds.get("start_telemart"): self.cb.select()
+        if not self.master_app.creds.get("pin_hash"): self.pin_frame.grid_forget(); self.unlock(True)
+
+    def upd(self):
+        st = "normal" if (self.cb.get() == 1 and self.save_btn.cget("state") == "normal") else "disabled"
+        self.le.configure(state=st)
+        self.pe.configure(state=st)
+
+    def unlock(self, no_pin=False):
         try:
-            decrypted_data = decrypt_credentials(creds, pin)
-            self.master_app.pin_unlocked(decrypted_data)
+            d = decrypt_credentials(self.master_app.creds, None if no_pin else self.pin_ent.get())
+            self.lv.set(d[0]);
+            self.pv.set(d[1]);
+            self.sv1.set(d[2][0]);
+            self.sv2.set(d[2][1]);
+            self.sv3.set(d[2][2])
+            if d[3]: self.cb.select()
+            for w in self.sf.winfo_children():
+                if isinstance(w, (ctk.CTkEntry, ctk.CTkCheckBox, ctk.CTkButton)): w.configure(state="normal")
+            self.save_btn.configure(state="normal")
+            self.upd()
+            self.pin_frame.grid_forget()
+        except:
+            messagebox.showerror("Ошибка", "Ошибка разблокировки")
+
+    def save(self):
+        try:
+            save_credentials(self.lv.get(), self.pv.get(), self.pin_ent.get() or None,
+                             [self.sv1.get(), self.sv2.get(), self.sv3.get()], self.cb.get() == 1)
+            self.master_app.creds = load_credentials()
+            self.master_app.decrypted_creds = decrypt_credentials(self.master_app.creds, self.pin_ent.get() or None)
+            self.master_app.update_main_window_buttons()
             self.destroy()
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка расшифровки данных:\n{e}", parent=self)
+            messagebox.showerror("Ошибка", str(e))
+
+    def delete(self):
+        if messagebox.askyesno("Удаление", "Вы уверены? Это удалит credentials.json"):
+            clear_credentials()
+            self.master_app.quit()
 
 
-# --- 3. Главное Окно ---
+# --- MAIN WINDOW ---
 class MainWindow(ctk.CTkFrame):
     def __init__(self, master_app):
         super().__init__(master_app)
         self.master_app = master_app
 
         self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=0)
 
-        self.top_frame = ctk.CTkFrame(self)
-        self.top_frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+        # --- ВЕРХНЯЯ ПАНЕЛЬ ---
+        self.top_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.top_frame.grid(row=0, column=0, columnspan=3, padx=10, pady=(5, 0), sticky="ew")
+
         self.top_frame.grid_columnconfigure(0, weight=1)
-        self.settings_button = ctk.CTkButton(
-            self.top_frame, text="⚙️", width=30, height=30,
-            command=self.master_app.open_settings_window
-        )
-        self.settings_button.grid(row=0, column=1, sticky="e")
+        self.top_frame.grid_columnconfigure(1, weight=1)
+        self.top_frame.grid_columnconfigure(2, weight=0)
 
-        self.status_frame = ctk.CTkFrame(self)
-        self.status_frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
-        self.status_frame.grid_columnconfigure(1, weight=1)  # Колонка статуса
+        # 1. Версия
+        self.version_frame = ctk.CTkFrame(self.top_frame, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                                          fg_color="#181818", border_width=1, border_color="#333333")
+        self.version_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.version_frame.pack_propagate(False)
+        self.version_label = ctk.CTkLabel(self.version_frame, text="v1.0 release", text_color="#666666",
+                                          font=ctk.CTkFont(size=12))
+        self.version_label.place(relx=0.5, rely=0.53, anchor="center")
 
-        # --- Ряд 1: Telemart Client ---
-        ctk.CTkLabel(self.status_frame, text="Telemart Client:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0,
-                                                                                                       padx=(10, 5),
-                                                                                                       pady=10,
-                                                                                                       sticky="w")
-        self.telemart_status = ctk.CTkLabel(self.status_frame, textvariable=self.master_app.telemart_status_var)
-        self.telemart_status.grid(row=0, column=1, padx=5, pady=10, sticky="w")
-        self.start_telemart_button = ctk.CTkButton(self.status_frame, text="Start", width=125, state="disabled",
+        # 2. Статус Обновления
+        self.update_frame = ctk.CTkFrame(self.top_frame, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                                         fg_color="#181818", border_width=1, border_color="#333333")
+        self.update_frame.grid(row=0, column=1, sticky="ew", padx=(5, 5))
+        self.update_frame.pack_propagate(False)
+
+        self.update_inner = ctk.CTkFrame(self.update_frame, fg_color="transparent")
+        self.update_inner.place(relx=0.5, rely=0.53, anchor="center")
+
+        ctk.CTkLabel(self.update_inner, text="Обновление", text_color="#AAAAAA", font=ctk.CTkFont(size=12)).pack(
+            side="left", padx=(0, 8))
+        self.update_led = LEDCircle(self.update_inner, size=15, fg_color="#181818")
+        self.update_led.pack(side="left", padx=(0, 8))
+        self.update_led.set_state("success")
+        self.update_label = ctk.CTkLabel(self.update_inner, text="Актуально", text_color="#666666",
+                                         font=ctk.CTkFont(size=12))
+        self.update_label.pack(side="left")
+
+        # 3. Настройки (Вернулись к CTkButton)
+        self.settings_btn = ctk.CTkButton(self.top_frame, text="⚙️", width=35, height=ROW_HEIGHT,
+                                          fg_color="#181818", border_width=1, border_color="#333333",
+                                          text_color="#AAA", hover_color="#333",
+                                          command=self.master_app.open_settings_window)
+        self.settings_btn.grid(row=0, column=2, sticky="e", padx=(5, 0))
+
+        # --- КОНТЕНТ ---
+        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
+
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_columnconfigure(1, weight=1)
+        self.content_frame.grid_columnconfigure(2, weight=0)
+
+        # === Ряд 1: Telemart ===
+        self.telemart_title = TitleBox(self.content_frame, title="Telemart")
+        self.telemart_title.grid(row=0, column=0, padx=(0, 5), pady=8, sticky="ew")
+
+        self.telemart_status = StatusBox(self.content_frame, text="Ожидание")
+        self.telemart_status.grid(row=0, column=1, padx=(5, 5), pady=8, sticky="ew")
+
+        self.start_telemart_button = ctk.CTkButton(self.content_frame, text="Start",
+                                                   width=125, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                                                   state="disabled",
                                                    command=self.master_app.on_start_telemart_click)
-        self.start_telemart_button.grid(row=0, column=2, padx=10, pady=10, sticky="e")
+        self.start_telemart_button.grid(row=0, column=2, padx=(5, 0), pady=8, sticky="e")
 
-        # --- Ряд 2: Pritunl ---
-        ctk.CTkLabel(self.status_frame, text="Pritunl:", font=ctk.CTkFont(weight="bold")).grid(row=1, column=0,
-                                                                                               padx=(10, 5), pady=10,
-                                                                                               sticky="w")
-        self.pritunl_status = ctk.CTkLabel(self.status_frame, textvariable=self.master_app.pritunl_status_var)
-        self.pritunl_status.grid(row=1, column=1, padx=5, pady=10, sticky="w")
+        # === Ряд 2: Pritunl ===
+        self.pritunl_title = TitleBox(self.content_frame, title="Pritunl")
+        self.pritunl_title.grid(row=1, column=0, padx=(0, 5), pady=8, sticky="ew")
 
-        self.pritunl_buttons_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
-        self.pritunl_buttons_frame.grid(row=1, column=2, padx=10, pady=10, sticky="e")
+        self.pritunl_status = StatusBox(self.content_frame, text="Ожидание")
+        self.pritunl_status.grid(row=1, column=1, padx=(5, 5), pady=8, sticky="ew")
 
-        self.pritunl_btn_1 = ctk.CTkButton(self.pritunl_buttons_frame, text="P1", width=35,
+        self.pritunl_buttons_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        self.pritunl_buttons_frame.grid(row=1, column=2, padx=(5, 0), pady=8, sticky="e")
+
+        # Кнопки P1/P2/P3
+        self.pritunl_btn_1 = ctk.CTkButton(self.pritunl_buttons_frame, text="P1", height=ROW_HEIGHT,
+                                           corner_radius=CORNER_RADIUS,
                                            command=lambda: self.master_app.on_pritunl_connect_click(0))
-        self.pritunl_btn_1.pack(side="left", padx=(0, 5))
-        self.pritunl_btn_2 = ctk.CTkButton(self.pritunl_buttons_frame, text="P2", width=35,
+        self.pritunl_btn_2 = ctk.CTkButton(self.pritunl_buttons_frame, text="P2", height=ROW_HEIGHT,
+                                           corner_radius=CORNER_RADIUS,
                                            command=lambda: self.master_app.on_pritunl_connect_click(1))
-        self.pritunl_btn_2.pack(side="left", padx=5)
-        self.pritunl_btn_3 = ctk.CTkButton(self.pritunl_buttons_frame, text="P3", width=35,
+        self.pritunl_btn_3 = ctk.CTkButton(self.pritunl_buttons_frame, text="P3", height=ROW_HEIGHT,
+                                           corner_radius=CORNER_RADIUS,
                                            command=lambda: self.master_app.on_pritunl_connect_click(2))
-        self.pritunl_btn_3.pack(side="left", padx=(5, 0))
 
-        # --- Ряд 3: VPN Monitor ---
-        ctk.CTkLabel(self.status_frame, text="VPN Monitor:", font=ctk.CTkFont(weight="bold")).grid(row=2, column=0,
-                                                                                                   padx=(10, 5),
-                                                                                                   pady=10, sticky="w")
-        self.monitor_status = ctk.CTkLabel(self.status_frame, textvariable=self.master_app.monitor_status_var)
-        self.monitor_status.grid(row=2, column=1, padx=5, pady=10, sticky="w")
+        # === Ряд 3: Monitor ===
+        self.monitor_title = TitleBox(self.content_frame, title="Monitor")
+        self.monitor_title.grid(row=2, column=0, padx=(0, 5), pady=8, sticky="ew")
 
-        self.disconnect_button = ctk.CTkButton(self.status_frame, text="Disconnect", width=125, state="disabled",
-                                               fg_color="grey", command=self.master_app.on_disconnect_click)
-        self.disconnect_button.grid(row=2, column=2, padx=10, pady=10, sticky="e")
+        self.monitor_status = StatusBox(self.content_frame, text="Ожидание")
+        self.monitor_status.grid(row=2, column=1, padx=(5, 5), pady=8, sticky="ew")
 
-        # --- Лог (скрыт) ---
-        self.log_textbox = ctk.CTkTextbox(self, state=ctk.NORMAL, height=250)
+        self.disconnect_button = ctk.CTkButton(self.content_frame, text="Disconnect",
+                                               width=125, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
+                                               state="disabled",
+                                               fg_color="grey",
+                                               command=self.master_app.on_disconnect_click)
+        self.disconnect_button.grid(row=2, column=2, padx=(5, 0), pady=8, sticky="e")
+
+        # --- Лог ---
+        self.log_textbox = ctk.CTkTextbox(self, state=ctk.NORMAL, height=200, fg_color="#111", text_color="#CCC")
         self.is_expanded = False
 
     def expand_log(self):
-        if self.is_expanded:
-            return
+        if self.is_expanded: return
         self.is_expanded = True
-
         current_w = self.master_app.winfo_width()
         self.master_app.geometry(f"{current_w}x600")
-
-        self.log_textbox.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+        self.log_textbox.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
         self.grid_rowconfigure(2, weight=1)
-
         logger = TextboxLogger(self.log_textbox)
         sys.stdout = logger
         sys.stderr = logger
 
-
-# --- Окно Настроек (вызывается из Главного) ---
-class SettingsWindow(ctk.CTkToplevel):
-    def __init__(self, master_app):
-        super().__init__(master_app)
-        self.master_app = master_app
-        self.title("Настройки TeleAuto")
-        self.geometry("500x600")
-        self.transient(master_app)
-        self.grab_set()
-
-        self.grid_columnconfigure(1, weight=1)
-
-        self.login_var = ctk.StringVar()
-        self.password_var = ctk.StringVar()
-        self.secret_var_1 = ctk.StringVar()
-        self.secret_var_2 = ctk.StringVar()
-        self.secret_var_3 = ctk.StringVar()
-
-        self.pin_frame = ctk.CTkFrame(self)
-        self.pin_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
-        self.pin_frame.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(self.pin_frame, text="PIN-код:").grid(row=0, column=0, padx=5, sticky="w")
-        self.pin_entry = ctk.CTkEntry(self.pin_frame, show="*")
-        self.pin_entry.grid(row=0, column=1, padx=5, sticky="ew")
-        self.unlock_button = ctk.CTkButton(self.pin_frame, text="Разблокировать", command=self.unlock_fields)
-        self.unlock_button.grid(row=0, column=2, padx=5)
-
-        self.settings_frame = ctk.CTkFrame(self)
-        self.settings_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
-        self.settings_frame.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 1):").grid(row=0, column=0, padx=10, pady=5,
-                                                                               sticky="w")
-        self.secret_entry_1 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_1, state="disabled")
-        self.secret_entry_1.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
-
-        ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 2):").grid(row=1, column=0, padx=10, pady=5,
-                                                                               sticky="w")
-        self.secret_entry_2 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_2, state="disabled")
-        self.secret_entry_2.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
-
-        ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 3):").grid(row=2, column=0, padx=10, pady=5,
-                                                                               sticky="w")
-        self.secret_entry_3 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_3, state="disabled")
-        self.secret_entry_3.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
-
-        help_text = "Обязательно заполняйте секретки в том порядке, в котором у вас находятся профиля в Pritunl"
-        ctk.CTkLabel(self.settings_frame, text=help_text, font=ctk.CTkFont(size=10), text_color="gray").grid(row=3,
-                                                                                                             column=0,
-                                                                                                             columnspan=2,
-                                                                                                             padx=10,
-                                                                                                             pady=(0,
-                                                                                                                   10),
-                                                                                                             sticky="w")
-
-        self.telemart_checkbox = ctk.CTkCheckBox(self.settings_frame, text="Автозапуск Telemart Client",
-                                                 command=self.toggle_login_fields, state="disabled")
-        self.telemart_checkbox.grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="w")
-
-        ctk.CTkLabel(self.settings_frame, text="Логин Telemart:").grid(row=5, column=0, padx=10, pady=5, sticky="w")
-        self.login_entry = ctk.CTkEntry(self.settings_frame, textvariable=self.login_var, state="disabled")
-        self.login_entry.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
-
-        ctk.CTkLabel(self.settings_frame, text="Пароль Telemart:").grid(row=6, column=0, padx=10, pady=5, sticky="w")
-        self.password_entry = ctk.CTkEntry(self.settings_frame, textvariable=self.password_var, show="*",
-                                           state="disabled")
-        self.password_entry.grid(row=6, column=1, padx=10, pady=5, sticky="ew")
-
-        self.save_button = ctk.CTkButton(self, text="Сохранить изменения", state="disabled", command=self.save_changes)
-        self.save_button.grid(row=2, column=0, columnspan=2, padx=10, pady=20)
-        self.delete_button = ctk.CTkButton(self, text="Удалить все данные", fg_color="#D00", hover_color="#A00",
-                                           command=self.delete_data)
-        self.delete_button.grid(row=3, column=0, columnspan=2, padx=10, pady=5)
-
-        self.telemart_checkbox.select() if self.master_app.creds.get(
-            "start_telemart") else self.telemart_checkbox.deselect()
-        self.toggle_login_fields()
-        if not self.master_app.creds.get("pin_hash"):
-            self.pin_frame.grid_forget()
-            self.unlock_fields(no_pin=True)
-
-    def toggle_login_fields(self):
-        is_unlocked = self.save_button.cget("state") == "normal"
-        if self.telemart_checkbox.get() == 1 and is_unlocked:
-            self.login_entry.configure(state="normal")
-            self.password_entry.configure(state="normal")
-        else:
-            self.login_entry.configure(state="disabled")
-            self.password_entry.configure(state="disabled")
-
-    def unlock_fields(self, no_pin=False):
-        pin = self.pin_entry.get()
-        creds = self.master_app.creds
-        decrypted_data = None
-
-        if no_pin:
-            try:
-                decrypted_data = decrypt_credentials(creds, None)
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Ошибка расшифровки данных: {e}", parent=self)
-                return
-        else:
-            if not verify_pin(creds.get("pin_hash"), pin):
-                messagebox.showerror("Ошибка", "Неверный PIN-код.", parent=self)
-                return
-            try:
-                decrypted_data = decrypt_credentials(creds, pin)
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Ошибка расшифровки данных: {e}", parent=self)
-                return
-
-        self.login_var.set(decrypted_data[0])
-        self.password_var.set(decrypted_data[1])
-        secrets = decrypted_data[2]
-        self.secret_var_1.set(secrets[0])
-        self.secret_var_2.set(secrets[1])
-        self.secret_var_3.set(secrets[2])
-        self.telemart_checkbox.select() if decrypted_data[3] else self.telemart_checkbox.deselect()
-
-        self.save_button.configure(state="normal")
-        self.telemart_checkbox.configure(state="normal")
-        self.secret_entry_1.configure(state="normal")
-        self.secret_entry_2.configure(state="normal")
-        self.secret_entry_3.configure(state="normal")
-        self.toggle_login_fields()
-        self.pin_frame.grid_forget()
-
-    def save_changes(self):
-        login = self.login_var.get()
-        password = self.password_var.get()
-        secrets_list = [
-            self.secret_var_1.get().strip(),
-            self.secret_var_2.get().strip(),
-            self.secret_var_3.get().strip()
-        ]
-        start_telemart = self.telemart_checkbox.get() == 1
-        pin = self.pin_entry.get() if self.master_app.creds.get("pin_hash") else None
-
-        if not any(secrets_list):
-            messagebox.showerror("Ошибка", "Хотя бы один секретный ключ 2FA должен быть заполнен.", parent=self)
-            return
-
-        if start_telemart and (not login or not password):
-            messagebox.showerror("Ошибка", "Логин и Пароль не могут быть пустыми...", parent=self)
-            return
-
-        try:
-            save_credentials(login, password, pin, secrets_list, start_telemart)
-            self.master_app.creds = load_credentials()
-            self.master_app.decrypted_creds = (login, password, secrets_list, start_telemart)
-            self.master_app.update_main_window_buttons()
-            messagebox.showinfo("Успех", "Настройки сохранены.", parent=self)
-            self.destroy()
-        except Exception as e:
-            messagebox.showerror("Ошибка сохранения", f"Не удалось сохранить credentials.json:\n{e}", parent=self)
-
-    def delete_data(self):
-        if messagebox.askyesno("Подтверждение", "Удалить все данные?\nПриложение будет закрыто.", parent=self):
-            try:
-                clear_credentials()
-                self.master_app.quit()
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось удалить файл:\n{e}", parent=self)
+    def update_panel_safe(self, panel_name, state, text):
+        title_box, status_box = None, None
+        if panel_name == 'telemart':
+            title_box, status_box = self.telemart_title, self.telemart_status
+        elif panel_name == 'pritunl':
+            title_box, status_box = self.pritunl_title, self.pritunl_status
+        elif panel_name == 'monitor':
+            title_box, status_box = self.monitor_title, self.monitor_status
+        if title_box and status_box:
+            self.after(0, lambda: title_box.set_led(state))
+            self.after(0, lambda: status_box.set_text(text, state))
 
 
-# --- Главный класс приложения (контроллер) ---
+# --- APP CONTROLLER ---
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-
         self.creds = load_credentials()
         self.decrypted_creds = None
         self.monitor_instance = None
         self.monitor_thread = None
         self.main_frame = None
         self.vpn_is_connected = False
-
-        self.pritunl_status_var = ctk.StringVar(value="⚪ Ожидание")
-        self.telemart_status_var = ctk.StringVar(value="⚪ Ожидание")
-        self.monitor_status_var = ctk.StringVar(value="⚪ Ожидание")
-
-        self.title("TeleAuto")
-        self.geometry("500x280")
+        self.title("TeleAuto");
+        self.geometry("550x280");
         self.resizable(False, False)
 
         if not self.creds:
-            self.withdraw()
-            ConfigWindow(self)
+            self.withdraw(); ConfigWindow(self)
         else:
             if self.creds.get("pin_hash"):
-                self.withdraw()
-                PinWindow(self)
+                self.withdraw(); PinWindow(self)
             else:
                 try:
-                    self.decrypted_creds = decrypt_credentials(self.creds, None)
-                    self.show_main_window()
+                    self.decrypted_creds = decrypt_credentials(self.creds, None); self.show_main_window()
                 except Exception as e:
-                    self.withdraw()
-                    messagebox.showerror("Ошибка данных",
-                                         f"Не удалось расшифровать данные без PIN. \n{e}\nУдалите credentials.json и перезапустите.")
-                    self.quit()
-
+                    messagebox.showerror("Error", str(e)); self.quit()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def config_saved(self, pin_used):
@@ -476,257 +535,159 @@ class App(ctk.CTk):
         if pin_used:
             PinWindow(self)
         else:
-            self.decrypted_creds = decrypt_credentials(self.creds, None)
-            self.show_main_window()
+            self.decrypted_creds = decrypt_credentials(self.creds, None); self.show_main_window()
 
-    def pin_unlocked(self, decrypted_data):
-        self.decrypted_creds = decrypted_data
+    def pin_unlocked(self, data):
+        self.decrypted_creds = data
         self.show_main_window()
 
     def show_main_window(self):
-        self.deiconify()
-        self.main_frame = MainWindow(self)
+        self.deiconify();
+        self.main_frame = MainWindow(self);
         self.main_frame.pack(fill="both", expand=True)
-        self.main_frame.expand_log()
-        self.geometry("600x600")
+        self.main_frame.expand_log();
+        self.geometry("650x600");
         self.resizable(True, True)
-
         self.update_main_window_buttons()
-
-        print("--- Запуск: проверка активных VPN ---")
+        print("--- Запуск Системы ---");
         self.on_disconnect_click(startup=True)
 
+    def set_ui_status(self, target, state, text):
+        if self.main_frame: self.main_frame.update_panel_safe(target, state, text)
+
     def update_main_window_buttons(self, is_busy=False):
-        if not self.main_frame:
-            return
-
+        if not self.main_frame: return
         secrets = self.decrypted_creds[2]
-        buttons = [
-            self.main_frame.pritunl_btn_1,
-            self.main_frame.pritunl_btn_2,
-            self.main_frame.pritunl_btn_3
-        ]
+        buttons = [self.main_frame.pritunl_btn_1, self.main_frame.pritunl_btn_2, self.main_frame.pritunl_btn_3]
+        active = [i for i, s in enumerate(secrets) if s]
+        count = len(active)
 
-        if is_busy:
-            for btn in buttons:
-                btn.configure(state="disabled")
+        total = 125;
+        spacing = 5
+        w = (total - (count - 1) * spacing) // count if count > 0 else 0
+
+        for btn in buttons: btn.pack_forget()
+        for i, btn in enumerate(buttons):
+            if i in active:
+                is_last = (i == active[-1])
+                px = (0, 0) if is_last else (0, spacing)
+
+                # Стандартный configure для CTkButton
+                btn.configure(width=w, height=ROW_HEIGHT)
+                btn.pack(side="left", padx=px)
+
+                state = "disabled" if (is_busy or self.vpn_is_connected) else "normal"
+                btn.configure(state=state)
+
+        state = "disabled" if is_busy else ("normal" if self.vpn_is_connected else "disabled")
+        self.main_frame.start_telemart_button.configure(state=state)
+        self.main_frame.disconnect_button.configure(state=state)
+        if not is_busy and not self.vpn_is_connected:
             self.main_frame.start_telemart_button.configure(state="disabled")
             self.main_frame.disconnect_button.configure(state="disabled")
-        else:
-            # Логика по умолчанию
-            for i, secret in enumerate(secrets):
-                if not secret:
-                    buttons[i].configure(state="disabled")
-                else:
-                    buttons[i].configure(state="normal")
-
-            if self.vpn_is_connected:
-                self.main_frame.start_telemart_button.configure(state="normal")
-                self.main_frame.disconnect_button.configure(state="normal")
-                for btn in buttons:
-                    btn.configure(state="disabled")
-            else:
-                self.main_frame.start_telemart_button.configure(state="disabled")
-                self.main_frame.disconnect_button.configure(state="disabled")
+            for i, btn in enumerate(buttons):
+                if i in active: btn.configure(state="normal")
 
     def open_settings_window(self):
-        if self.decrypted_creds is None and self.creds.get("pin_hash"):
-            messagebox.showinfo("Информация", "Сначала нужно разблокировать данные, введя PIN в окне настроек.",
-                                parent=self)
         SettingsWindow(self)
 
     def on_closing(self):
-        if self.monitor_instance:
-            self.monitor_instance.stop()
+        if self.monitor_instance: self.monitor_instance.stop()
         self.quit()
 
-    def on_pritunl_connect_click(self, profile_index):
-        if not self.main_frame.is_expanded:
-            self.main_frame.expand_log()
-            print("--- Лог активирован ---")
-
+    # --- LOGIC ---
+    def on_pritunl_connect_click(self, idx):
+        if not self.main_frame.is_expanded: self.main_frame.expand_log()
         self.update_main_window_buttons(is_busy=True)
-
-        secret_2fa = self.decrypted_creds[2][profile_index]
-
-        threading.Thread(
-            target=self.run_pritunl_logic,
-            args=(profile_index, secret_2fa),
-            daemon=True
-        ).start()
+        threading.Thread(target=self.run_pritunl, args=(idx,), daemon=True).start()
 
     def on_start_telemart_click(self):
-        if not self.main_frame.is_expanded:
-            self.main_frame.expand_log()
-            print("--- Лог активирован ---")
-
+        if not self.main_frame.is_expanded: self.main_frame.expand_log()
         self.main_frame.start_telemart_button.configure(state="disabled")
-        threading.Thread(target=self.run_telemart_logic, daemon=True).start()
+        threading.Thread(target=self.run_telemart, daemon=True).start()
 
     def on_disconnect_click(self, startup=False):
-        if not self.main_frame.is_expanded and not startup:
-            self.main_frame.expand_log()
-            print("--- Лог активирован ---")
-
+        if not self.main_frame.is_expanded and not startup: self.main_frame.expand_log()
         self.update_main_window_buttons(is_busy=True)
-        self.pritunl_status_var.set("🟡 Отключение...")
+        self.set_ui_status("pritunl", "waiting", "Отключение...")
+        threading.Thread(target=self.run_disconnect, args=(startup,), daemon=True).start()
 
-        threading.Thread(target=self.run_disconnect_logic, args=(startup,), daemon=True).start()
-
-    # --- ИЗМЕНЕНА ЛОГИКА ---
-    def run_disconnect_logic(self, startup=False):
+    def run_disconnect(self, startup=False):
         try:
-            # 1. Остановить монитор
-            if self.monitor_instance:
-                print("Остановка VPN монитора...")
-                self.monitor_instance.stop()
-                self.monitor_instance = None
-
-            # 2. Проверить, нужно ли отключаться
-            if vpn.check_vpn_connection():  #
-                print("Обнаружен активный VPN. Запускаю отключение...")
-                vpn.disconnect_vpn()  #
-                vpn.wait_for_disconnect()  #
-            else:
-                if startup:
-                    print("Активный VPN не обнаружен. Пропускаю отключение.")
-                else:
-                    print("VPN уже отключен.")
-
+            if self.monitor_instance: self.monitor_instance.stop(); self.monitor_instance = None
+            if vpn.check_vpn_connection(): vpn.disconnect_vpn(); vpn.wait_for_disconnect()
             self.vpn_is_connected = False
-
-            if not startup:
-                print("--- Система готова к новому подключению ---")
-
         except Exception as e:
-            print(f"Ошибка при отключении: {e}")
+            print(e)
         finally:
-            # 4. Сбросить GUI
-            self.pritunl_status_var.set("⚪ Отключен")
-            self.telemart_status_var.set("⚪ Ожидание")
-            self.monitor_status_var.set("⚪ Ожидание")
-            self.update_main_window_buttons(is_busy=False)  # Разблокируем P1/P2/P3
-
-    def run_pritunl_logic(self, profile_index, secret_2fa):
-        try:
-            self.pritunl_status_var.set("🟡 Проверка интернета...")
-            if not wait_for_internet():  #
-                self.pritunl_status_var.set("🔴 Интернет недоступен")
-                self.update_main_window_buttons(is_busy=False)
-                return
-
-            if vpn.check_vpn_connection():  #
-                self.pritunl_status_var.set("🔴 Ошибка: VPN все еще активен.")
-                self.update_main_window_buttons(is_busy=False)
-                return
-
-            max_attempts = 5
-            attempt = 0
-            while attempt < max_attempts and not self.vpn_is_connected:
-                attempt += 1
-                self.pritunl_status_var.set(f"🟡 Попытка P{profile_index + 1} #{attempt}...")
-
-                vpn.start_pritunl()  #
-
-                if not vpn.click_pritunl_connect(profile_index=profile_index):  #
-                    print(f"Не удалось нажать Connect для профиля {profile_index + 1}")
-                    time.sleep(5)
-                    continue
-
-                print("Проверка времени (NTP)...")
-                time_ok, ntp_time = check_time_drift()  #
-                if not time_ok:
-                    print("!!! ВНИМАНИЕ: СИСТЕМНОЕ ВРЕМЯ НЕВЕРНО !!!")
-
-                totp_code = get_current_totp(secret_2fa, ntp_time=ntp_time)  #
-
-                if not vpn.input_2fa_code_and_reconnect(totp_code):  #
-                    print("Не удалось ввести 2FA код.")
-                    time.sleep(5)
-                    continue
-
-                print("Ожидание подключения (10 сек)...")
-                time.sleep(10)
-
-                if vpn.check_vpn_connection():  #
-                    self.vpn_is_connected = True
-                    self.pritunl_status_var.set(f"🟢 VPN P{profile_index + 1} подключен")
-                    print("VPN подключен успешно!")
-                else:
-                    print(f"Попытка #{attempt} не удалась.")
-
-            if not self.vpn_is_connected:
-                self.pritunl_status_var.set("🔴 Ошибка подключения")
-                self.update_main_window_buttons(is_busy=False)
-            else:
-                self.start_vpn_monitor(profile_index, secret_2fa)
-                self.update_main_window_buttons(is_busy=False)
-
-        except Exception as e:
-            print(f"!!! КРИТИЧЕСКАЯ ОШИБКА VPN: {e} !!!")
-            self.pritunl_status_var.set("🔴 Критическая ошибка")
+            self.set_ui_status("pritunl", "off", "Отключен")
+            self.set_ui_status("telemart", "off", "Ожидание")
+            self.set_ui_status("monitor", "off", "Ожидание")
             self.update_main_window_buttons(is_busy=False)
 
-    def run_telemart_logic(self):
+    def run_pritunl(self, idx):
         try:
-            username, password, _, start_telemart_flag = self.decrypted_creds
-
-            if not start_telemart_flag:
-                print("Запуск Telemart отключен в настройках.")
-                self.telemart_status_var.set("⚪ Отключено")
-                self.main_frame.start_telemart_button.configure(state="normal")
+            self.set_ui_status("pritunl", "waiting", "Интернет...")
+            if not wait_for_internet():
+                self.set_ui_status("pritunl", "error", "Нет сети");
+                self.update_main_window_buttons();
                 return
+
+            secret = self.decrypted_creds[2][idx]
+            attempt = 0
+            while attempt < 5 and not self.vpn_is_connected:
+                attempt += 1
+                self.set_ui_status("pritunl", "working", f"Попытка {attempt}...")
+                vpn.start_pritunl()
+                if not vpn.click_pritunl_connect(profile_index=idx): time.sleep(2); continue
+
+                ok, ntp = check_time_drift()
+                totp = get_current_totp(secret, ntp_time=ntp)
+                if not vpn.input_2fa_code_and_reconnect(totp): time.sleep(2); continue
+
+                time.sleep(10)
+                if vpn.check_vpn_connection():
+                    self.vpn_is_connected = True
+                    self.set_ui_status("pritunl", "success", "Подключено")
 
             if not self.vpn_is_connected:
-                messagebox.showerror("Ошибка", "VPN не подключен. Сначала подключите Pritunl.")
-                self.telemart_status_var.set("🔴 VPN не подключен")
-                self.main_frame.start_telemart_button.configure(state="normal")
-                return
-
-            self.telemart_status_var.set("🟡 Запуск Telemart...")
-            print("Запускаем Telemart Client...")
-            start_telemart()  #
-            time.sleep(5)
-
-            self.telemart_status_var.set("🟡 Вход в Telemart...")
-            print("Выполняем вход в Telemart...")
-            if login_telemart(username, password):  #
-                print("Вход в Telemart выполнен!")
-                self.telemart_status_var.set("🟢 Вход выполнен")
+                self.set_ui_status("pritunl", "error", "Сбой")
             else:
-                print("Ошибка входа в Telemart.")
-                self.telemart_status_var.set("🔴 Ошибка входа")
-
+                self.start_monitor(idx, secret)
+            self.update_main_window_buttons()
         except Exception as e:
-            print(f"!!! КРИТИЧЕСКАЯ ОШИБКА TELEMART: {e} !!!")
-            self.telemart_status_var.set("🔴 Критическая ошибка")
+            print(e);
+            self.set_ui_status("pritunl", "error", "Ошибка");
+            self.update_main_window_buttons()
+
+    def run_telemart(self):
+        try:
+            if not self.vpn_is_connected: return
+            self.set_ui_status("telemart", "working", "Запуск...")
+            start_telemart();
+            time.sleep(5)
+            self.set_ui_status("telemart", "working", "Вход...")
+            u, p, _, _ = self.decrypted_creds
+            if login_telemart(u, p):
+                self.set_ui_status("telemart", "success", "Готово")
+            else:
+                self.set_ui_status("telemart", "error", "Ошибка")
+        except Exception as e:
+            print(e); self.set_ui_status("telemart", "error", "Сбой")
         finally:
             self.main_frame.start_telemart_button.configure(state="normal")
 
-    def start_vpn_monitor(self, profile_index, secret_2fa):
-        self.monitor_status_var.set("🟡 Запуск монитора...")
-        print("Запуск фонового мониторинга VPN...")
-
-        if not secret_2fa:
-            print(f"VPN Monitor не может быть запущен: нет 2FA секрета для профиля {profile_index + 1}.")
-            self.monitor_status_var.set("🔴 Нет 2FA для монитора")
-            return
-
-        monitor = SimpleVPNMonitor(pin_code=None, secret_2fa=secret_2fa, profile_index=profile_index)  #
-
-        if monitor.start():  #
-            print("VPN Monitor запущен в фоне.")
-            self.monitor_status_var.set("🟢 Мониторинг активен")
-            self.monitor_instance = monitor
-            self.monitor_thread = monitor.monitor_thread
+    def start_monitor(self, idx, secret):
+        self.set_ui_status("monitor", "working", "Запуск...")
+        m = SimpleVPNMonitor(pin_code=None, secret_2fa=secret, profile_index=idx)
+        if m.start():
+            self.set_ui_status("monitor", "success", "Активен")
+            self.monitor_instance = m
         else:
-            print("VPN Monitor не запущен.")
-            self.monitor_status_var.set("🔴 Ошибка монитора")
+            self.set_ui_status("monitor", "error", "Ошибка")
 
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("Dark")
     ctk.set_default_color_theme("blue")
-
-    app = App()
-    app.mainloop()
+    App().mainloop()
