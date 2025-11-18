@@ -72,15 +72,15 @@ class ConfigWindow(ctk.CTkToplevel):
         self.pin_repeat_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self, text="Секрет 2FA (Профиль 1):").grid(row=2, column=0, padx=10, pady=5, sticky="w")
-        self.secret_entry_1 = ctk.CTkEntry(self)
+        self.secret_entry_1 = ctk.CTkEntry(self, show="*")
         self.secret_entry_1.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self, text="Секрет 2FA (Профиль 2):").grid(row=3, column=0, padx=10, pady=5, sticky="w")
-        self.secret_entry_2 = ctk.CTkEntry(self)
+        self.secret_entry_2 = ctk.CTkEntry(self, show="*")
         self.secret_entry_2.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self, text="Секрет 2FA (Профиль 3):").grid(row=4, column=0, padx=10, pady=5, sticky="w")
-        self.secret_entry_3 = ctk.CTkEntry(self)
+        self.secret_entry_3 = ctk.CTkEntry(self, show="*")
         self.secret_entry_3.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self, text="Оставьте поле 2FA пустым, если профиль не используется.",
@@ -300,17 +300,17 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 1):").grid(row=0, column=0, padx=10, pady=5,
                                                                                sticky="w")
-        self.secret_entry_1 = ctk.CTkEntry(self.settings_frame, textvariable=self.secret_var_1, state="disabled")
+        self.secret_entry_1 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_1, state="disabled")
         self.secret_entry_1.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 2):").grid(row=1, column=0, padx=10, pady=5,
                                                                                sticky="w")
-        self.secret_entry_2 = ctk.CTkEntry(self.settings_frame, textvariable=self.secret_var_2, state="disabled")
+        self.secret_entry_2 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_2, state="disabled")
         self.secret_entry_2.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
 
         ctk.CTkLabel(self.settings_frame, text="Секрет 2FA (Профиль 3):").grid(row=2, column=0, padx=10, pady=5,
                                                                                sticky="w")
-        self.secret_entry_3 = ctk.CTkEntry(self.settings_frame, textvariable=self.secret_var_3, state="disabled")
+        self.secret_entry_3 = ctk.CTkEntry(self.settings_frame, show="*", textvariable=self.secret_var_3, state="disabled")
         self.secret_entry_3.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
 
         help_text = "Обязательно заполняйте секретки в том порядке, в котором у вас находятся профиля в Pritunl"
