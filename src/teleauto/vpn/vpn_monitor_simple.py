@@ -3,64 +3,60 @@ import time
 import threading
 from . import vpn
 from src.teleauto.network.network_utils import wait_for_internet
-# --- ИМПОРТЫ ДОБАВЛЕНЫ ОБРАТНО ---
 from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
+from src.teleauto.localization import tr
 
 
 class SimpleVPNMonitor:
-    def __init__(self, pin_code=None, secret_2fa=None, profile_index=0):  # <-- ДОБАВЛЕН profile_index
+    def __init__(self, pin_code=None, secret_2fa=None, profile_index=0):
         self.running = False
         self.connected = False
         self.monitor_thread = None
         self.pin_code = pin_code
         self.totp_secret = secret_2fa
-        self.profile_index = profile_index  # <-- СОХРАНЯЕМ ИНДЕКС
+        self.profile_index = profile_index
         self.check_interval = 5
 
-        print(f"VPN Monitor (Simple) инициализирован для профиля #{profile_index + 1}")
+        print(tr("log_mon_init", idx=profile_index + 1))
 
     def check_vpn_connection(self):
-        """Проверяем состояние VPN подключения через обновленную функцию"""
         try:
             return vpn.check_vpn_connection()
         except Exception as e:
-            print(f"Ошибка проверки VPN: {e}")
+            print(tr("log_mon_vpn_check_err", e=e))
             return False
 
     def reconnect_vpn(self):
-        """Переподключение к VPN"""
-        print("Проверяем статус подключения к интернету...")
+        print(tr("log_mon_internet_check"))
         wait_for_internet()
 
-        print(f"Переподключение к VPN (профиль #{self.profile_index + 1})...")
+        print(tr("log_mon_reconnect_profile", idx=self.profile_index + 1))
         try:
             vpn.start_pritunl()
 
             time_ok, ntp_time = check_time_drift()
             if not time_ok:
-                input("Исправьте системное время и нажмите Enter для продолжения...")
+                print(tr("log_mon_time_fix"))
 
             totp_code = get_current_totp(self.totp_secret, ntp_time=ntp_time)
 
             if not totp_code:
-                print("Не удалось получить TOTP код")
+                print(tr("log_mon_totp_fail"))
                 return False
 
-            # --- ИСПРАВЛЕНО: Передаем сохраненный self.profile_index ---
             if vpn.click_pritunl_connect(profile_index=self.profile_index):
                 if vpn.input_2fa_code_and_reconnect(totp_code):
-                    print("Восстановление соединения VPN началось...")
+                    print(tr("log_mon_restore_start"))
                     return True
 
-            print(f"Не удалось нажать click_pritunl_connect для профиля {self.profile_index + 1}")
+            print(tr("log_mon_click_fail", idx=self.profile_index + 1))
             return False
         except Exception as e:
-            print(f"Ошибка переподключения VPN: {e}")
+            print(tr("log_mon_reconnect_err", e=e))
             return False
 
     def monitor_loop(self):
-        """Основной цикл мониторинга"""
-        print("Запуск цикла мониторинга VPN...")
+        print(tr("log_mon_loop_start"))
 
         while self.running:
             try:
@@ -68,43 +64,45 @@ class SimpleVPNMonitor:
 
                 if is_connected != self.connected:
                     self.connected = is_connected
-                    status = "ПОДКЛЮЧЕН" if self.connected else "ОТКЛЮЧЕН"
-                    print(f"VPN статус: {status}")
+                    status = tr("status_connected") if self.connected else tr("status_disconnected")
+                    print(tr("log_mon_status", status=status))
 
                 if not self.connected:
-                    print("VPN отключен, попытка переподключения...")
+                    print(tr("log_mon_vpn_down"))
                     if self.reconnect_vpn():
                         time.sleep(10)
                         self.connected = self.check_vpn_connection()
                         if self.connected:
-                            print("Переподключение успешно")
+                            print(tr("log_mon_reconnect_success"))
 
                 time.sleep(self.check_interval)
 
             except Exception as e:
-                print(f"Ошибка в мониторинге: {e}")
+                print(tr("log_mon_loop_err", e=e))
                 time.sleep(self.check_interval)
 
     def start(self):
-        """Запуск мониторинга"""
         if not self.totp_secret:
-            print(f"Нет секрета 2FA для мониторинга (профиль {self.profile_index + 1})")
+            print(tr("log_mon_no_secret", idx=self.profile_index + 1))
             return False
 
-        print("Запуск VPN Monitor (консольная версия)...")
         self.connected = self.check_vpn_connection()
-        print(f"Начальное состояние VPN: {'подключен' if self.connected else 'отключен'}")
+        state_text = tr("state_connected_lower") if self.connected else tr("state_disconnected_lower")
+        print(tr("log_mon_initial_state", state=state_text))
 
         self.running = True
+
+        # ИСПРАВЛЕНИЕ: Сначала пишем в лог, потом запускаем поток
+        # Это предотвращает "слипание" строк из-за гонки потоков
+        print(tr("log_mon_bg_start"))
+
         self.monitor_thread = threading.Thread(target=self.monitor_loop, daemon=True)
         self.monitor_thread.start()
 
-        print("Мониторинг VPN запущен в фоне")
         return True
 
     def stop(self):
-        """Остановка мониторинга"""
-        print("Остановка VPN Monitor...")
+        print(tr("log_mon_stop"))
         self.running = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=2)
