@@ -22,7 +22,7 @@ from src.teleauto.localization import tr, set_language
 from src.teleauto.login.login import login_telemart, start_telemart
 from src.teleauto.vpn import vpn
 from src.teleauto.vpn.vpn_monitor_simple import SimpleVPNMonitor
-from src.teleauto.network.network_utils import wait_for_internet
+from src.teleauto.network.network_utils import wait_for_internet, check_internet_ping # +check_internet_ping
 from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
 
 # Исправленные импорты для GUI модулей:
@@ -58,6 +58,10 @@ class App(ctk.CTk):
                 except Exception as e:
                     messagebox.showerror("Error", str(e)); self.quit()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # Start network monitoring
+        self.net_monitor_running = True
+        threading.Thread(target=self.network_monitor_loop, daemon=True).start()
 
     def config_saved(self, pin_used):
         self.creds = load_credentials()
@@ -115,8 +119,20 @@ class App(ctk.CTk):
         SettingsWindow(self)
 
     def on_closing(self):
+        self.net_monitor_running = False # Stop net monitor
         if self.monitor_instance: self.monitor_instance.stop()
         self.quit()
+
+    def network_monitor_loop(self):
+        """Background thread to check internet ping."""
+        while self.net_monitor_running:
+            try:
+                connected, ping = check_internet_ping()
+                if self.main_frame:
+                    self.main_frame.after(0, lambda c=connected, p=ping: self.main_frame.update_net_status(c, p))
+            except Exception:
+                pass
+            time.sleep(3)
 
     def on_pritunl_connect_click(self, idx):
         if not self.main_frame.is_expanded: self.main_frame.expand_log()
