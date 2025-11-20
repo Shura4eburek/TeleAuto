@@ -1,12 +1,15 @@
 # src/teleauto/localization.py
+import emoji
 
 CURRENT_LANG = "ru"
 
+# Формируем словарь с настоящими эмодзи через библиотеку
 LANG_CODES = {
-    "💩 Russian": "ru",
-    "🇺🇸 English": "en",
-    "🇺🇦 Ukrainian": "ua"
+    f"{emoji.emojize(':pile_of_poo:')} Russian": "ru",
+    f"{emoji.emojize(':United_States:')} English": "en",
+    f"{emoji.emojize(':Ukraine:')} Ukrainian": "ua"
 }
+# Обратный маппинг (ru -> 💩 Russian)
 LANG_NAMES = {v: k for k, v in LANG_CODES.items()}
 
 TRANSLATIONS = {
@@ -19,6 +22,8 @@ TRANSLATIONS = {
         "pin_repeat": "Повторите PIN:",
         "pin_enter_msg": "Введите ваш PIN-код:",
         "secret_1": "Секрет 2FA (Профиль 1):",
+        "net_status_label": "Интернет",
+        "net_ping_label": "Ping:",
         "secret_2": "Секрет 2FA (Профиль 2):",
         "secret_3": "Секрет 2FA (Профиль 3):",
         "secret_hint": "Заполняйте по порядку профилей в Pritunl",
@@ -52,21 +57,15 @@ TRANSLATIONS = {
         "restart_title": "Требуется перезапуск",
         "restart_msg": "Язык интерфейса изменен.\nПожалуйста, перезапустите программу для применения настроек.",
 
-        # LOGS (General)
-        "log_system_start": "--- Запуск Системы ---",
-
-        # LOGS (Network Utils)
+        # LOGS
+        "log_system_start": "--- Запуск Системи ---",
         "log_net_checking": "Проверка подключения к интернету через {host}...",
         "log_net_available": "Интернет доступен.",
         "log_net_unavailable": "Интернет недоступен, пробуем снова...",
         "log_net_ping_err": "Ошибка пинга: {e}",
-
-        # LOGS (TOTP / Time)
         "log_time_drift_warn": "Внимание! Системное время отличается от реального на {drift:.2f} сек.",
         "log_time_sync_rec": "Рекомендуется синхронизировать время на компьютере.",
         "log_time_ntp_err": "Ошибка проверки времени через NTP: {e}",
-
-        # LOGS (VPN Connect)
         "log_vpn_check_pre": "Проверка окна Pritunl...",
         "log_vpn_window_found": "Окно Pritunl найдено, видимость: {visible}",
         "log_vpn_restart": "Окно невидимо. Перезапускаем...",
@@ -85,8 +84,6 @@ TRANSLATIONS = {
         "log_vpn_kill_error": "Ошибка завершения процесса: {e}",
         "log_vpn_check_error": "Ошибка проверки Pritunl: {e}",
         "log_vpn_connect_click_error": "Ошибка нажатия Connect: {e}",
-
-        # LOGS (Monitor)
         "log_mon_init": "VPN Monitor инициализирован для P#{idx}",
         "log_mon_vpn_check_err": "Ошибка проверки VPN: {e}",
         "log_mon_internet_check": "Проверяем интернет...",
@@ -109,8 +106,6 @@ TRANSLATIONS = {
         "state_connected_lower": "подключен",
         "state_disconnected_lower": "отключен",
         "log_mon_initial_state": "Начальное состояние VPN: {state}",
-
-        # LOGS (Telemart)
         "log_tm_launching": "Запускаем Telemart Client...",
         "log_tm_launched": "Telemart Client запущен",
         "log_tm_already_running": "Telemart уже запущен",
@@ -154,6 +149,8 @@ TRANSLATIONS = {
         "password": "Password:",
         "save_btn": "Save & Continue",
         "save_changes_btn": "Save Changes",
+        "net_status_label": "Internet",
+        "net_ping_label": "Ping:",
         "unlock_btn": "Unlock",
         "delete_btn": "Reset Data",
         "delete_confirm": "Are you sure? This deletes all data.",
@@ -185,11 +182,9 @@ TRANSLATIONS = {
         "log_net_available": "Internet available.",
         "log_net_unavailable": "Internet unavailable, retrying...",
         "log_net_ping_err": "Ping error: {e}",
-
         "log_time_drift_warn": "Warning! System time drift: {drift:.2f} sec.",
         "log_time_sync_rec": "Please synchronize system time.",
         "log_time_ntp_err": "NTP check error: {e}",
-
         "log_vpn_check_pre": "Checking Pritunl window...",
         "log_vpn_window_found": "Pritunl found, visible: {visible}",
         "log_vpn_restart": "Window hidden. Restarting...",
@@ -208,7 +203,6 @@ TRANSLATIONS = {
         "log_vpn_kill_error": "Kill process error: {e}",
         "log_vpn_check_error": "Pritunl check error: {e}",
         "log_vpn_connect_click_error": "Connect click error: {e}",
-
         "log_mon_init": "VPN Monitor init for P#{idx}",
         "log_mon_vpn_check_err": "VPN check error: {e}",
         "log_mon_internet_check": "Checking internet...",
@@ -231,7 +225,6 @@ TRANSLATIONS = {
         "state_connected_lower": "connected",
         "state_disconnected_lower": "disconnected",
         "log_mon_initial_state": "Initial VPN state: {state}",
-
         "log_tm_launching": "Launching Telemart Client...",
         "log_tm_launched": "Telemart Client launched",
         "log_tm_already_running": "Telemart already running",
@@ -253,7 +246,6 @@ TRANSLATIONS = {
         "log_tm_update_cycle": "Update cycle {current}/{max}",
         "log_tm_login_ok": "Login successful",
         "log_tm_update_fail": "Login failed after updates",
-
         "log_tm_start": "Starting Telemart...",
         "log_tm_login": "Logging in...",
         "log_tm_success": "Login Successful!",
@@ -278,6 +270,8 @@ TRANSLATIONS = {
         "save_changes_btn": "Зберегти зміни",
         "unlock_btn": "Розблокувати",
         "delete_btn": "Скидання даних",
+        "net_status_label": "Інтернет",
+        "net_ping_label": "Ping:",
         "delete_confirm": "Ви впевнені? Це видалить усі дані.",
         "error_pin_mismatch": "PIN коди не співпадають.",
         "error_no_secret": "Вкажіть хоча б один секрет 2FA.",
@@ -297,22 +291,14 @@ TRANSLATIONS = {
         "update_actual": "Актуально",
         "btn_start": "Старт",
         "btn_disconnect": "Стоп",
-        "lang_label": "Мова / Language:",
-        "restart_title": "Необхідний перезапуск",
-        "restart_msg": "Мову змінено.\nБудь ласка, перезапустіть програму для застосування змін.",
-
-        # LOGS
         "log_system_start": "--- Запуск Системи ---",
-
         "log_net_checking": "Перевірка інтернету через {host}...",
         "log_net_available": "Інтернет є.",
         "log_net_unavailable": "Інтернет недоступний, ще раз...",
         "log_net_ping_err": "Помилка пінгу: {e}",
-
         "log_time_drift_warn": "Увага! Відхилення часу: {drift:.2f} сек.",
         "log_time_sync_rec": "Рекомендується синхронізація часу.",
         "log_time_ntp_err": "Помилка NTP: {e}",
-
         "log_vpn_check_pre": "Перевірка вікна Pritunl...",
         "log_vpn_window_found": "Вікно Pritunl знайдено, видимість: {visible}",
         "log_vpn_restart": "Вікно невидиме. Перезапуск...",
@@ -331,7 +317,6 @@ TRANSLATIONS = {
         "log_vpn_kill_error": "Помилка зупинки процесу: {e}",
         "log_vpn_check_error": "Помилка перевірки Pritunl: {e}",
         "log_vpn_connect_click_error": "Помилка кліку Connect: {e}",
-
         "log_mon_init": "VPN Monitor ініціалізовано для P#{idx}",
         "log_mon_vpn_check_err": "Помилка перевірки VPN: {e}",
         "log_mon_internet_check": "Перевірка інтернету...",
@@ -354,7 +339,6 @@ TRANSLATIONS = {
         "state_connected_lower": "підключено",
         "state_disconnected_lower": "відключено",
         "log_mon_initial_state": "Початковий стан VPN: {state}",
-
         "log_tm_launching": "Запускаємо Telemart Client...",
         "log_tm_launched": "Telemart Client запущено",
         "log_tm_already_running": "Telemart вже працює",
@@ -376,7 +360,6 @@ TRANSLATIONS = {
         "log_tm_update_cycle": "Цикл оновлення {current}/{max}",
         "log_tm_login_ok": "Вхід успішний",
         "log_tm_update_fail": "Вхід не вдався після оновлень",
-
         "log_tm_start": "Запуск Telemart...",
         "log_tm_login": "Вхід в акаунт...",
         "log_tm_success": "Вхід виконано!",
