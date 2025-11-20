@@ -1,3 +1,4 @@
+# src/teleauto/gui/constants.py
 import sys
 
 # Размеры и геометрия
@@ -11,3 +12,5 @@ BORDER_COLOR = "#333333"
 # Шрифты
 EMOJI_FONT_FAMILY = "Segoe UI Emoji" if sys.platform == "win32" else "Apple Color Emoji"
 EMOJI_FONT = (EMOJI_FONT_FAMILY, 12)
+
+MAIN_FONT_FAMILY = "Unbounded"
