@@ -48,4 +48,4 @@
 4.  The application will minimize to tray or run in the background, keeping your connection alive.
 
 ---
-*Developed by Shura4eburek*
+*Developed by Mamoru*
