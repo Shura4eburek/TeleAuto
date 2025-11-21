@@ -2,9 +2,9 @@
 import subprocess
 import time
 from pywinauto import Desktop
-from src.teleauto.localization import tr # <--- ИМПОРТ
+from src.teleauto.localization import tr
 
-def start_telemart(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClient\Telemart.Client.exe"):
+def start_telemart(path):
     try:
         # Проверяем процессы
         result = subprocess.run(['tasklist'], capture_output=True, text=True)
@@ -20,8 +20,11 @@ def start_telemart(path=r"C:\Users\Mamoru\Downloads\TelemartClient\TelemartClien
 
         if not (process_found or window_found):
             print(tr("log_tm_launching"))
-            subprocess.Popen([path])
-            print(tr("log_tm_launched"))
+            if path:
+                subprocess.Popen([path])
+                print(tr("log_tm_launched"))
+            else:
+                 print(tr("error_no_tm_path"))
         else:
             print(tr("log_tm_already_running"))
     except Exception as e:
