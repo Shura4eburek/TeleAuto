@@ -93,6 +93,8 @@ class App(ctk.CTk):
         self.update_main_window_buttons();
         print(tr("log_system_start"));
         self.on_disconnect_click(startup=True)
+        if self.update_ready and self.new_version_tag:
+            self.main_frame.show_update_ready(self.new_version_tag)
 
     def set_ui_status(self, target, state, text_key):
         if self.main_frame: self.main_frame.update_panel_safe(target, state, text_key)

@@ -4,7 +4,7 @@ import customtkinter as ctk
 from src.teleauto.localization import tr
 from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY
 from .widgets import LEDCircle, TitleBox, StatusBox, TextboxLogger
-
+from .constants import VERSION
 
 class MainWindow(ctk.CTkFrame):
     def __init__(self, master_app):
@@ -32,7 +32,7 @@ class MainWindow(ctk.CTkFrame):
         self.version_frame.pack_propagate(False)
 
         # FIX: rely=0.43 (Подняли текст)
-        ctk.CTkLabel(self.version_frame, text="v1.0 release", text_color="#666666", font=f_label).place(relx=0.5,
+        ctk.CTkLabel(self.version_frame, text=VERSION, text_color="#666666", font=f_label).place(relx=0.5,
                                                                                                         rely=0.43,
                                                                                                         anchor="center")
 
@@ -172,6 +172,14 @@ class MainWindow(ctk.CTkFrame):
         if title_box and status_box:
             self.after(0, lambda: title_box.set_led(state))
             self.after(0, lambda: status_box.set_text_key(text_key, state))
+
+    def show_update_ready(self, version_tag):
+        """Меняет статус в верхней панели, когда обновление скачано"""
+        # Меняем цвет диода на желтый ("working")
+        self.update_led.set_state("working")
+
+        # Меняем текст на версию обновления
+        self.update_label.configure(text=f"Ready: {version_tag}", text_color="#E0E0E0")
 
     def update_net_status(self, is_connected, ping_ms):
         if is_connected:
