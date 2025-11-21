@@ -1,11 +1,8 @@
 import sys
 import os
 
-# --- PATH FIX (Добавляем корень проекта в sys.path) ---
-# Находим путь к этому файлу (src/teleauto/gui/app.py)
+# --- PATH FIX ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# Поднимаемся на 3 уровня вверх (gui -> teleauto -> src -> ROOT)
-# ROOT - это папка, в которой лежит папка src
 project_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -15,17 +12,14 @@ import time
 import customtkinter as ctk
 from tkinter import messagebox
 
-# --- ИМПОРТЫ (ИСПРАВЛЕНО) ---
-# Используем абсолютные импорты вместо относительных (from .module)
 from src.teleauto.credentials import load_credentials, decrypt_credentials
 from src.teleauto.localization import tr, set_language
 from src.teleauto.login.login import login_telemart, start_telemart
 from src.teleauto.vpn import vpn
 from src.teleauto.vpn.vpn_monitor_simple import SimpleVPNMonitor
-from src.teleauto.network.network_utils import wait_for_internet, check_internet_ping # +check_internet_ping
+from src.teleauto.network.network_utils import wait_for_internet, check_internet_ping
 from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
 
-# Исправленные импорты для GUI модулей:
 from src.teleauto.gui.windows import ConfigWindow, PinWindow, SettingsWindow
 from src.teleauto.gui.main_view import MainWindow
 from src.teleauto.gui.utils import apply_window_settings
@@ -43,20 +37,24 @@ class App(ctk.CTk):
         self.vpn_is_connected = False
 
         if self.creds: set_language(self.creds.get("language", "ru"))
-        self.title("TeleAuto");
-        self.geometry("550x280");
+        self.title("TeleAuto")
+        self.geometry("550x280")
         self.resizable(False, False)
         self.after(10, lambda: apply_window_settings(self))
         if not self.creds:
-            self.withdraw(); ConfigWindow(self)
+            self.withdraw();
+            ConfigWindow(self)
         else:
             if self.creds.get("pin_hash"):
-                self.withdraw(); PinWindow(self)
+                self.withdraw();
+                PinWindow(self)
             else:
                 try:
-                    self.decrypted_creds = decrypt_credentials(self.creds, None); self.show_main_window()
+                    self.decrypted_creds = decrypt_credentials(self.creds, None);
+                    self.show_main_window()
                 except Exception as e:
-                    messagebox.showerror("Error", str(e)); self.quit()
+                    messagebox.showerror("Error", str(e));
+                    self.quit()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Start network monitoring
@@ -68,7 +66,8 @@ class App(ctk.CTk):
         if pin_used:
             PinWindow(self)
         else:
-            self.decrypted_creds = decrypt_credentials(self.creds, None); self.show_main_window()
+            self.decrypted_creds = decrypt_credentials(self.creds, None);
+            self.show_main_window()
 
     def pin_unlocked(self, data):
         self.decrypted_creds = data
@@ -119,7 +118,7 @@ class App(ctk.CTk):
         SettingsWindow(self)
 
     def on_closing(self):
-        self.net_monitor_running = False # Stop net monitor
+        self.net_monitor_running = False  # Stop net monitor
         if self.monitor_instance: self.monitor_instance.stop()
         self.quit()
 
@@ -185,30 +184,47 @@ class App(ctk.CTk):
                                                                                                 "status_active"); print(
                     tr("log_vpn_connected"))
             if not self.vpn_is_connected:
-                self.set_ui_status("pritunl", "error", "status_error"); self.set_ui_status("monitor", "off",
-                                                                                           "status_waiting")
+                self.set_ui_status("pritunl", "error", "status_error");
+                self.set_ui_status("monitor", "off",
+                                   "status_waiting")
             else:
                 self.start_monitor(idx, secret)
             self.update_main_window_buttons()
         except Exception as e:
-            print(e); self.set_ui_status("pritunl", "error", "status_error"); self.set_ui_status("monitor", "off",
-                                                                                                 "status_waiting"); self.update_main_window_buttons()
+            print(e);
+            self.set_ui_status("pritunl", "error", "status_error");
+            self.set_ui_status("monitor", "off",
+                               "status_waiting");
+            self.update_main_window_buttons()
 
     def run_telemart(self):
         try:
             if not self.vpn_is_connected: return
+
+            # Распаковка с путем
+            u, p, _, _, _, tm_path = self.decrypted_creds
+
+            # Проверка пути
+            if not tm_path or not os.path.exists(tm_path):
+                self.after(0, lambda: messagebox.showerror("Error", tr("error_no_tm_path")))
+                return
+
             self.set_ui_status("telemart", "working", "status_working");
             print(tr("log_tm_start"));
-            start_telemart();
+
+            # Передаем путь
+            start_telemart(tm_path);
+
             time.sleep(5)
             print(tr("log_tm_login"));
-            u, p, _, _, _ = self.decrypted_creds
             if login_telemart(u, p):
-                self.set_ui_status("telemart", "success", "status_success"); print(tr("log_tm_success"))
+                self.set_ui_status("telemart", "success", "status_success");
+                print(tr("log_tm_success"))
             else:
                 self.set_ui_status("telemart", "error", "status_error")
         except Exception as e:
-            print(e); self.set_ui_status("telemart", "error", "status_error")
+            print(e);
+            self.set_ui_status("telemart", "error", "status_error")
         finally:
             self.main_frame.start_telemart_button.configure(state="normal")
 
@@ -217,7 +233,8 @@ class App(ctk.CTk):
         print(tr("log_monitor_start"))
         m = SimpleVPNMonitor(pin_code=None, secret_2fa=secret, profile_index=idx)
         if m.start():
-            self.set_ui_status("monitor", "success", "status_active"); self.monitor_instance = m
+            self.set_ui_status("monitor", "success", "status_active");
+            self.monitor_instance = m
         else:
             self.set_ui_status("monitor", "error", "status_error")
 

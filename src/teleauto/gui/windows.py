@@ -13,7 +13,7 @@ class ConfigWindow(ctk.CTkToplevel):
         super().__init__(master_app)
         self.master_app = master_app
         self.title(tr("window_title_setup"))
-        self.geometry("450x680")
+        self.geometry("450x750")  # Увеличил высоту
         self.transient(master_app)
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
@@ -73,43 +73,61 @@ class ConfigWindow(ctk.CTkToplevel):
         self.telemart_checkbox = ctk.CTkCheckBox(self.tm_frame, text=tr("auto_start_tm"), font=f_label,
                                                  command=self.toggle_login_fields)
         self.telemart_checkbox.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="w")
+
+        # Путь к файлу
+        self.lbl_path = ctk.CTkLabel(self.tm_frame, text=tr("tm_path_label"), font=f_label)
+        self.lbl_path.grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        self.path_entry = ctk.CTkEntry(self.tm_frame, font=f_entry)
+        self.path_entry.grid(row=2, column=1, padx=(10, 5), pady=5, sticky="ew")
+        self.browse_btn = ctk.CTkButton(self.tm_frame, text="📂", width=40, font=f_btn, command=self.browse_file)
+        self.browse_btn.grid(row=2, column=2, padx=(0, 10), pady=5)
+
         self.lbl_login = ctk.CTkLabel(self.tm_frame, text=tr("login"), font=f_label)
-        self.lbl_login.grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        self.lbl_login.grid(row=3, column=0, padx=10, pady=5, sticky="w")
         self.login_entry = ctk.CTkEntry(self.tm_frame, font=f_entry)
-        self.login_entry.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+        self.login_entry.grid(row=3, column=1, columnspan=2, padx=10, pady=5, sticky="ew")
         self.lbl_pass = ctk.CTkLabel(self.tm_frame, text=tr("password"), font=f_label)
-        self.lbl_pass.grid(row=3, column=0, padx=10, pady=(5, 15), sticky="w")
+        self.lbl_pass.grid(row=4, column=0, padx=10, pady=(5, 15), sticky="w")
         self.password_entry = ctk.CTkEntry(self.tm_frame, show="*", font=f_entry)
-        self.password_entry.grid(row=3, column=1, padx=10, pady=(5, 15), sticky="ew")
+        self.password_entry.grid(row=4, column=1, columnspan=2, padx=10, pady=(5, 15), sticky="ew")
 
         self.save_btn = ctk.CTkButton(self, text=tr("save_btn"), height=35, font=f_btn, command=self.save_config)
         self.save_btn.pack(padx=20, pady=20, fill="x")
 
-        self.toggle_login_fields();
+        self.toggle_login_fields()
         self.protocol("WM_DELETE_WINDOW", self.master_app.quit)
 
     def change_lang(self, choice):
         set_language(LANG_CODES[choice])
         self.refresh_ui()
 
+    def browse_file(self):
+        filename = ctk.filedialog.askopenfilename(filetypes=[("Executables", "*.exe"), ("All files", "*.*")])
+        if filename:
+            self.path_entry.delete(0, "end")
+            self.path_entry.insert(0, filename)
+
     def refresh_ui(self):
         self.title(tr("window_title_setup"))
         for frame in [self.lang_frame, self.sec_frame, self.vpn_frame, self.tm_frame]: frame.refresh_text()
-        self.lbl_pin.configure(text=tr("pin_label"));
+        self.lbl_pin.configure(text=tr("pin_label"))
         self.lbl_pin_rep.configure(text=tr("pin_repeat"))
-        self.lbl_sec1.configure(text=tr("secret_1"));
-        self.lbl_sec2.configure(text=tr("secret_2"));
-        self.lbl_sec3.configure(text=tr("secret_3"));
+        self.lbl_sec1.configure(text=tr("secret_1"))
+        self.lbl_sec2.configure(text=tr("secret_2"))
+        self.lbl_sec3.configure(text=tr("secret_3"))
         self.lbl_hint.configure(text=tr("secret_hint"))
-        self.telemart_checkbox.configure(text=tr("auto_start_tm"));
-        self.lbl_login.configure(text=tr("login"));
+        self.telemart_checkbox.configure(text=tr("auto_start_tm"))
+        self.lbl_path.configure(text=tr("tm_path_label"))
+        self.lbl_login.configure(text=tr("login"))
         self.lbl_pass.configure(text=tr("password"))
         self.save_btn.configure(text=tr("save_btn"))
 
     def toggle_login_fields(self):
         st = "normal" if self.telemart_checkbox.get() == 1 else "disabled"
-        self.login_entry.configure(state=st);
+        self.login_entry.configure(state=st)
         self.password_entry.configure(state=st)
+        self.path_entry.configure(state=st)
+        self.browse_btn.configure(state=st)
 
     def save_config(self):
         pin = self.pin_entry.get()
@@ -119,8 +137,9 @@ class ConfigWindow(ctk.CTkToplevel):
         if not any(secrets): return messagebox.showerror("Error", tr("error_no_secret"))
         try:
             save_credentials(self.login_entry.get(), self.password_entry.get(), pin or None, secrets,
-                             self.telemart_checkbox.get() == 1, language=get_language())
-            self.destroy();
+                             self.telemart_checkbox.get() == 1, language=get_language(),
+                             telemart_path=self.path_entry.get())
+            self.destroy()
             self.master_app.config_saved(pin or None)
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -128,10 +147,10 @@ class ConfigWindow(ctk.CTkToplevel):
 
 class PinWindow(ctk.CTkToplevel):
     def __init__(self, master_app):
-        super().__init__(master_app);
+        super().__init__(master_app)
         self.master_app = master_app
-        self.title(tr("window_title_pin"));
-        self.geometry("320x180");
+        self.title(tr("window_title_pin"))
+        self.geometry("320x180")
         self.transient(master_app)
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
@@ -147,7 +166,7 @@ class PinWindow(ctk.CTkToplevel):
         ctk.CTkLabel(self.frame, text=tr("pin_enter_msg"), font=f_msg).pack(pady=(20, 5))
         self.pin_entry = ctk.CTkEntry(self.frame, show="*", width=200, justify="center", font=f_entry)
         self.pin_entry.pack(pady=10)
-        self.pin_entry.bind("<Return>", self.check);
+        self.pin_entry.bind("<Return>", self.check)
         self.pin_entry.focus()
         ctk.CTkButton(self.frame, text=tr("unlock_btn"), height=35, width=200, font=f_btn, command=self.check).pack(
             pady=10)
@@ -168,16 +187,16 @@ class PinWindow(ctk.CTkToplevel):
 
 class SettingsWindow(ctk.CTkToplevel):
     def __init__(self, master_app):
-        super().__init__(master_app);
+        super().__init__(master_app)
         self.master_app = master_app
-        self.title(tr("window_title_settings"));
-        self.geometry("450x680");
-        self.transient(master_app);
+        self.title(tr("window_title_settings"))
+        self.geometry("450x700")
+        self.transient(master_app)
         self.grab_set()
-        self.initial_lang = get_language();
+        self.initial_lang = get_language()
         self.selected_lang = get_language()
         self.after(10, lambda: apply_window_settings(self))
-        self.grid_columnconfigure(0, weight=1);
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         # Fonts
@@ -185,70 +204,81 @@ class SettingsWindow(ctk.CTkToplevel):
         f_entry = (MAIN_FONT_FAMILY, 12)
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
 
-        self.sv1 = ctk.StringVar();
-        self.sv2 = ctk.StringVar();
-        self.sv3 = ctk.StringVar();
-        self.lv = ctk.StringVar();
+        self.sv1 = ctk.StringVar()
+        self.sv2 = ctk.StringVar()
+        self.sv3 = ctk.StringVar()
+        self.lv = ctk.StringVar()
         self.pv = ctk.StringVar()
+        self.tm_path_var = ctk.StringVar()
 
-        self.pin_frame = SettingsGroup(self, title_key="group_access");
+        self.pin_frame = SettingsGroup(self, title_key="group_access")
         self.pin_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 5))
         ctk.CTkLabel(self.pin_frame, text="PIN:", font=f_label).grid(row=1, column=0, padx=10, pady=10)
-        self.pin_ent = ctk.CTkEntry(self.pin_frame, show="*", font=f_entry);
+        self.pin_ent = ctk.CTkEntry(self.pin_frame, show="*", font=f_entry)
         self.pin_ent.grid(row=1, column=1, sticky="ew", padx=5)
         self.unlock_btn = ctk.CTkButton(self.pin_frame, text=tr("unlock_btn"), width=80, height=28,
-                                        font=(MAIN_FONT_FAMILY, 11, "bold"), command=self.unlock);
+                                        font=(MAIN_FONT_FAMILY, 11, "bold"), command=self.unlock)
         self.unlock_btn.grid(row=1, column=2, padx=10)
 
-        self.content_wrapper = ctk.CTkFrame(self, fg_color="transparent");
-        self.content_wrapper.grid(row=1, column=0, sticky="nsew", padx=15, pady=5);
+        self.content_wrapper = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_wrapper.grid(row=1, column=0, sticky="nsew", padx=15, pady=5)
         self.content_wrapper.grid_columnconfigure(0, weight=1)
 
-        self.lang_frame = SettingsGroup(self.content_wrapper, title_key="lang_label");
+        self.lang_frame = SettingsGroup(self.content_wrapper, title_key="lang_label")
         self.lang_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self.lang_var = ctk.StringVar(value=LANG_NAMES.get(get_language(), "💩 Russian"))
         self.lang_combo = ctk.CTkOptionMenu(self.lang_frame, values=list(LANG_CODES.keys()), variable=self.lang_var,
                                             command=self.change_lang_setting, state="disabled", font=EMOJI_FONT,
-                                            dropdown_font=EMOJI_FONT);
+                                            dropdown_font=EMOJI_FONT)
         self.lang_combo.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
-        self.vpn_frame = SettingsGroup(self.content_wrapper, title_key="group_vpn");
+        self.vpn_frame = SettingsGroup(self.content_wrapper, title_key="group_vpn")
         self.vpn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        self.lbl_sec1 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_1"), font=f_label);
+        self.lbl_sec1 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_1"), font=f_label)
         self.lbl_sec1.grid(row=1, column=0, padx=10, pady=5, sticky="w")
-        self.e1 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv1, show="*", state="disabled", font=f_entry);
+        self.e1 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv1, show="*", state="disabled", font=f_entry)
         self.e1.grid(row=1, column=1, sticky="ew", padx=10, pady=5)
-        self.lbl_sec2 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_2"), font=f_label);
+        self.lbl_sec2 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_2"), font=f_label)
         self.lbl_sec2.grid(row=2, column=0, padx=10, pady=5, sticky="w")
-        self.e2 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv2, show="*", state="disabled", font=f_entry);
+        self.e2 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv2, show="*", state="disabled", font=f_entry)
         self.e2.grid(row=2, column=1, sticky="ew", padx=10, pady=5)
-        self.lbl_sec3 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_3"), font=f_label);
+        self.lbl_sec3 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_3"), font=f_label)
         self.lbl_sec3.grid(row=3, column=0, padx=10, pady=(5, 15), sticky="w")
-        self.e3 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv3, show="*", state="disabled", font=f_entry);
+        self.e3 = ctk.CTkEntry(self.vpn_frame, textvariable=self.sv3, show="*", state="disabled", font=f_entry)
         self.e3.grid(row=3, column=1, sticky="ew", padx=10, pady=(5, 15))
 
-        self.tm_frame = SettingsGroup(self.content_wrapper, title_key="group_tm");
+        self.tm_frame = SettingsGroup(self.content_wrapper, title_key="group_tm")
         self.tm_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         self.cb = ctk.CTkCheckBox(self.tm_frame, text=tr("auto_start_tm"), state="disabled", font=f_label,
-                                  command=self.upd);
+                                  command=self.upd)
         self.cb.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="w")
-        self.lbl_login = ctk.CTkLabel(self.tm_frame, text=tr("login"), font=f_label);
-        self.lbl_login.grid(row=2, column=0, padx=10, pady=5, sticky="w")
-        self.le = ctk.CTkEntry(self.tm_frame, textvariable=self.lv, state="disabled", font=f_entry);
-        self.le.grid(row=2, column=1, sticky="ew", padx=10, pady=5)
-        self.lbl_pass = ctk.CTkLabel(self.tm_frame, text=tr("password"), font=f_label);
-        self.lbl_pass.grid(row=3, column=0, padx=10, pady=(5, 15), sticky="w")
-        self.pe = ctk.CTkEntry(self.tm_frame, textvariable=self.pv, show="*", state="disabled", font=f_entry);
-        self.pe.grid(row=3, column=1, sticky="ew", padx=10, pady=(5, 15))
 
-        self.actions_frame = ctk.CTkFrame(self, fg_color="transparent");
-        self.actions_frame.grid(row=2, column=0, sticky="ew", padx=15, pady=15);
+        # Путь к файлу
+        self.lbl_path = ctk.CTkLabel(self.tm_frame, text=tr("tm_path_label"), font=f_label)
+        self.lbl_path.grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        self.path_ent = ctk.CTkEntry(self.tm_frame, textvariable=self.tm_path_var, state="disabled", font=f_entry)
+        self.path_ent.grid(row=2, column=1, sticky="ew", padx=(10, 5), pady=5)
+        self.browse_btn = ctk.CTkButton(self.tm_frame, text="📂", width=40, state="disabled", font=f_btn,
+                                        command=self.browse_file)
+        self.browse_btn.grid(row=2, column=2, padx=(0, 10), pady=5)
+
+        self.lbl_login = ctk.CTkLabel(self.tm_frame, text=tr("login"), font=f_label)
+        self.lbl_login.grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        self.le = ctk.CTkEntry(self.tm_frame, textvariable=self.lv, state="disabled", font=f_entry)
+        self.le.grid(row=3, column=1, columnspan=2, sticky="ew", padx=10, pady=5)
+        self.lbl_pass = ctk.CTkLabel(self.tm_frame, text=tr("password"), font=f_label)
+        self.lbl_pass.grid(row=4, column=0, padx=10, pady=(5, 15), sticky="w")
+        self.pe = ctk.CTkEntry(self.tm_frame, textvariable=self.pv, show="*", state="disabled", font=f_entry)
+        self.pe.grid(row=4, column=1, columnspan=2, sticky="ew", padx=10, pady=(5, 15))
+
+        self.actions_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.actions_frame.grid(row=2, column=0, sticky="ew", padx=15, pady=15)
         self.actions_frame.grid_columnconfigure(0, weight=1)
         self.save_btn = ctk.CTkButton(self.actions_frame, text=tr("save_changes_btn"), height=35, state="disabled",
-                                      font=f_btn, command=self.save);
+                                      font=f_btn, command=self.save)
         self.save_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.del_btn = ctk.CTkButton(self.actions_frame, text=tr("delete_btn"), height=35, fg_color="#AA0000",
-                                     hover_color="#880000", font=f_btn, command=self.delete);
+                                     hover_color="#880000", font=f_btn, command=self.delete)
         self.del_btn.grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
         if self.master_app.creds.get("start_telemart"): self.cb.select()
@@ -257,24 +287,33 @@ class SettingsWindow(ctk.CTkToplevel):
     def change_lang_setting(self, lang):
         self.selected_lang = LANG_CODES[lang]
 
+    def browse_file(self):
+        filename = ctk.filedialog.askopenfilename(filetypes=[("Executables", "*.exe"), ("All files", "*.*")])
+        if filename:
+            self.tm_path_var.set(filename)
+
     def upd(self):
         st = "normal" if (self.cb.get() == 1 and self.save_btn.cget("state") == "normal") else "disabled"
-        self.le.configure(state=st);
+        self.le.configure(state=st)
         self.pe.configure(state=st)
+        self.path_ent.configure(state=st)
+        self.browse_btn.configure(state=st)
 
     def unlock(self, no_pin=False):
         try:
-            # Added strip() here too
             pin_val = None if no_pin else self.pin_ent.get().strip()
             d = decrypt_credentials(self.master_app.creds, pin_val)
-            self.lv.set(d[0]);
-            self.pv.set(d[1]);
-            self.sv1.set(d[2][0]);
-            self.sv2.set(d[2][1]);
+            self.lv.set(d[0])
+            self.pv.set(d[1])
+            self.sv1.set(d[2][0])
+            self.sv2.set(d[2][1])
             self.sv3.set(d[2][2])
             if d[3]: self.cb.select()
-            for w in [self.e1, self.e2, self.e3, self.cb, self.lang_combo]: w.configure(state="normal")
-            self.save_btn.configure(state="normal");
+            if len(d) > 5: self.tm_path_var.set(d[5])
+
+            for w in [self.e1, self.e2, self.e3, self.cb, self.lang_combo, self.path_ent, self.browse_btn]:
+                w.configure(state="normal")
+            self.save_btn.configure(state="normal")
             self.upd()
             if not no_pin: self.pin_frame.grid_forget()
         except:
@@ -284,7 +323,8 @@ class SettingsWindow(ctk.CTkToplevel):
         try:
             pin = self.pin_ent.get().strip() if self.master_app.creds.get("pin_hash") else None
             save_credentials(self.lv.get(), self.pv.get(), pin, [self.sv1.get(), self.sv2.get(), self.sv3.get()],
-                             self.cb.get() == 1, language=self.selected_lang)
+                             self.cb.get() == 1, language=self.selected_lang,
+                             telemart_path=self.tm_path_var.get())
             self.master_app.creds = load_credentials()
             self.master_app.decrypted_creds = decrypt_credentials(self.master_app.creds, pin)
             self.master_app.update_main_window_buttons()
