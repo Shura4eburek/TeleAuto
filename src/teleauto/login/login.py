@@ -1,13 +1,16 @@
-﻿# telemart_login.py
+﻿# src/teleauto/login/login.py
 import subprocess
 import time
 from pywinauto import Desktop
 from src.teleauto.localization import tr
 
+# --- ДОБАВЬТЕ ЭТУ КОНСТАНТУ ---
+CREATE_NO_WINDOW = 0x08000000
+
 def start_telemart(path):
     try:
-        # Проверяем процессы
-        result = subprocess.run(['tasklist'], capture_output=True, text=True)
+        # Проверяем процессы (ДОБАВЛЕНО creationflags)
+        result = subprocess.run(['tasklist'], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
         process_found = 'telemart' in result.stdout.lower()
 
         # Проверяем окна
@@ -21,7 +24,8 @@ def start_telemart(path):
         if not (process_found or window_found):
             print(tr("log_tm_launching"))
             if path:
-                subprocess.Popen([path])
+                # Запуск (ДОБАВЛЕНО creationflags)
+                subprocess.Popen([path], creationflags=CREATE_NO_WINDOW)
                 print(tr("log_tm_launched"))
             else:
                  print(tr("error_no_tm_path"))
