@@ -123,8 +123,22 @@ class TextboxLogger:
         self.stdout = sys.stdout
 
     def write(self, message):
-        self.stdout.write(message)
+        # Если есть реальная консоль (sys.stdout не None) — пишем туда
+        if self.stdout:
+            try:
+                self.stdout.write(message)
+            except Exception:
+                pass
+
+        # В любом случае пишем в GUI
         self.textbox.after(0, self.write_to_gui, message)
+
+    def flush(self):
+        if self.stdout:
+            try:
+                self.stdout.flush()
+            except Exception:
+                pass
 
     def write_to_gui(self, message):
         try:
