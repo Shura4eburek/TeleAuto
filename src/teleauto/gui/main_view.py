@@ -180,3 +180,8 @@ class MainWindow(ctk.CTkFrame):
         else:
             self.net_led.set_state("error")
             self.ping_value_label.configure(text="-- ms", text_color="#666666")
+
+    def show_update_ready(self, version_tag):
+        self.update_led.set_state("working")  # Желтый
+        self.update_label.configure(text=f"Ready: {version_tag}", text_color="#E0E0E0")
+        # Можно добавить тултип или изменить текст кнопки, если она есть
