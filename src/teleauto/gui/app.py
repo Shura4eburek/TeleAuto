@@ -1,6 +1,7 @@
 import sys
 import os
-
+import threading
+from tkinter import messagebox
 # --- PATH FIX ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
@@ -25,9 +26,13 @@ from src.teleauto.gui.main_view import MainWindow
 from src.teleauto.gui.utils import apply_window_settings
 from src.teleauto.gui.constants import ROW_HEIGHT
 
+from src.teleauto.gui.fonts import load_custom_font
+from src.teleauto.updater import check_and_download, schedule_update_on_exit
+from src.teleauto.gui.constants import VERSION
 
 class App(ctk.CTk):
     def __init__(self):
+        load_custom_font("Unbounded-Regular.ttf")
         super().__init__()
         self.creds = load_credentials()
         self.decrypted_creds = None
@@ -35,6 +40,10 @@ class App(ctk.CTk):
         self.monitor_thread = None
         self.main_frame = None
         self.vpn_is_connected = False
+        self.update_ready = False
+        self.new_version_tag = None
+
+        threading.Thread(target=self.bg_update_check, daemon=True).start()
 
         if self.creds: set_language(self.creds.get("language", "ru"))
         self.title("TeleAuto")
@@ -238,6 +247,39 @@ class App(ctk.CTk):
         else:
             self.set_ui_status("monitor", "error", "status_error")
 
+    def bg_update_check(self):
+        """Фоновая проверка обновлений через GitHub"""
+        try:
+            # Вызываем реальную функцию проверки
+            downloaded, tag = check_and_download(VERSION)
+
+            if downloaded:
+                self.update_ready = True
+                self.new_version_tag = tag
+                # Сообщаем GUI, что пора менять цвет лампочки
+                if self.main_frame:
+                    self.main_frame.after(0, self.notify_update_ui)
+        except Exception:
+            pass
+
+    def notify_update_ui(self):
+        """Сообщаем GUI, что обновление скачано"""
+        if self.main_frame:
+            # Метод, который мы добавим в MainWindow
+            self.main_frame.show_update_ready(self.new_version_tag)
+
+    def on_closing(self):
+        """Перехват закрытия окна"""
+        if self.update_ready:
+            # Если обновление скачано, спрашиваем или просто уведомляем
+            if messagebox.askyesno("Обновление",
+                                   f"Загружена версия {self.new_version_tag}.\nУстановить её сейчас?"):
+                schedule_update_on_exit()
+
+        # Стандартное закрытие
+        self.net_monitor_running = False
+        if self.monitor_instance: self.monitor_instance.stop()
+        self.quit()
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("Dark")

@@ -14,3 +14,5 @@ EMOJI_FONT_FAMILY = "Segoe UI Emoji" if sys.platform == "win32" else "Apple Colo
 EMOJI_FONT = (EMOJI_FONT_FAMILY, 12)
 
 MAIN_FONT_FAMILY = "Unbounded"
+
+VERSION = "v1.0"
