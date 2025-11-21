@@ -7,10 +7,13 @@ from pywinauto import Desktop
 from pywinauto.findwindows import ElementNotFoundError
 from src.teleauto.localization import tr
 
+# --- ДОБАВЬТЕ ЭТУ КОНСТАНТУ ---
+CREATE_NO_WINDOW = 0x08000000
 
 def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
     try:
-        result = subprocess.run(['tasklist'], capture_output=True, text=True)
+        # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
+        result = subprocess.run(['tasklist'], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
         process_found = 'pritunl.exe' in result.stdout.lower()
         window_found = False
         window_visible = False
@@ -32,13 +35,16 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
             if process_found and not window_visible:
                 print(tr("log_vpn_restart"))
                 try:
-                    subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'], capture_output=True, text=True)
+                    # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
+                    subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'],
+                                   capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
                     time.sleep(2)
                 except Exception as e:
                     print(tr("log_vpn_kill_error", e=e))
 
             print(tr("log_vpn_start"))
-            subprocess.Popen([path])
+            # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
+            subprocess.Popen([path], creationflags=CREATE_NO_WINDOW)
 
             for attempt in range(30):
                 time.sleep(1)
@@ -50,7 +56,6 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
                             print(tr("log_vpn_ready"))
                             break
                 except Exception:
-                    # Если ошибка доступа к окну - просто пробуем снова
                     continue
     except Exception as e:
         print(tr("log_vpn_check_error", e=e))
