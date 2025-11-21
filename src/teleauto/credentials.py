@@ -8,7 +8,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 
-CREDENTIALS_FILE = "credentials.json"  # Убрал ../.. для надежности, путь зависит от запуска
+CREDENTIALS_FILE = "credentials.json"
 
 
 def hash_password(password: str) -> bytes:
@@ -43,16 +43,16 @@ def decrypt_data(token: str, key: bytes) -> str:
     return f.decrypt(token.encode()).decode()
 
 
-def save_credentials(username, password, pin, secrets_list, start_telemart_flag=False, language="ru"):
+def save_credentials(username, password, pin, secrets_list, start_telemart_flag=False, language="ru", telemart_path=""):
     """
-    Сохраняет данные, включая язык.
+    Сохраняет данные, включая язык и путь к Telemart.
     """
     if len(secrets_list) != 3:
         raise ValueError("secrets_list must have 3 elements")
 
     base_data = {
         "start_telemart": start_telemart_flag,
-        "language": language  # Сохраняем язык
+        "language": language
     }
 
     if pin:
@@ -65,6 +65,7 @@ def save_credentials(username, password, pin, secrets_list, start_telemart_flag=
             "secret_2fa_1": encrypt_data(secrets_list[0], key),
             "secret_2fa_2": encrypt_data(secrets_list[1], key),
             "secret_2fa_3": encrypt_data(secrets_list[2], key),
+            "telemart_path": encrypt_data(telemart_path, key),
             "pin_hash": hash_password(pin).decode(),
             "salt": base64.b64encode(salt).decode(),
         }
@@ -76,6 +77,7 @@ def save_credentials(username, password, pin, secrets_list, start_telemart_flag=
             "secret_2fa_1": secrets_list[0],
             "secret_2fa_2": secrets_list[1],
             "secret_2fa_3": secrets_list[2],
+            "telemart_path": telemart_path,
             "pin_hash": None,
             "salt": None,
         }
@@ -101,11 +103,12 @@ def verify_pin(stored_pin_hash, entered_pin):
 
 def decrypt_credentials(creds, pin):
     """
-    Возвращает: (username, password, secrets_list, start_telemart_flag, language)
+    Возвращает: (username, password, secrets_list, start_telemart_flag, language, telemart_path)
     """
     start_telemart_flag = creds.get("start_telemart", False)
     language = creds.get("language", "ru")  # По умолчанию русский
     secrets_list = []
+    telemart_path = ""
 
     try:
         if pin and creds.get("salt"):
@@ -117,14 +120,16 @@ def decrypt_credentials(creds, pin):
             secrets_list.append(decrypt_data(creds.get("secret_2fa_1", ""), key))
             secrets_list.append(decrypt_data(creds.get("secret_2fa_2", ""), key))
             secrets_list.append(decrypt_data(creds.get("secret_2fa_3", ""), key))
+            telemart_path = decrypt_data(creds.get("telemart_path", ""), key)
         else:
             username = creds.get("username", "")
             password = creds.get("password", "")
             secrets_list.append(creds.get("secret_2fa_1", ""))
             secrets_list.append(creds.get("secret_2fa_2", ""))
             secrets_list.append(creds.get("secret_2fa_3", ""))
+            telemart_path = creds.get("telemart_path", "")
 
-        return username, password, secrets_list, start_telemart_flag, language
+        return username, password, secrets_list, start_telemart_flag, language, telemart_path
 
     except Exception as e:
         print(f"Decryption error: {e}")
