@@ -4,46 +4,37 @@ import time
 from pywinauto import Desktop
 from src.teleauto.localization import tr
 
-# --- ДОБАВЬТЕ ЭТУ КОНСТАНТУ ---
 CREATE_NO_WINDOW = 0x08000000
 
 def start_telemart(path):
+    # --- ФИКС 2: Принудительно убиваем процессы перед стартом ---
     try:
-        # Проверяем процессы (ДОБАВЛЕНО creationflags)
-        result = subprocess.run(['tasklist'], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-        process_found = 'telemart' in result.stdout.lower()
+        # Убиваем и Telemart.exe и Telemart.Client.exe (на всякий случай)
+        subprocess.run(['taskkill', '/f', '/im', 'Telemart.Client.exe'],
+                       capture_output=True, creationflags=CREATE_NO_WINDOW)
+        subprocess.run(['taskkill', '/f', '/im', 'Telemart.exe'],
+                       capture_output=True, creationflags=CREATE_NO_WINDOW)
+        time.sleep(1) # Даем время системе освободить ресурсы
+    except Exception:
+        pass
+    # ------------------------------------------------------------
 
-        # Проверяем окна
-        window_found = False
-        try:
-            spec = Desktop(backend="uia").window(title_re=r"^Telemart\.Client")
-            window_found = spec.exists()
-        except:
-            pass
-
-        if not (process_found or window_found):
-            print(tr("log_tm_launching"))
-            if path:
-                # Запуск (ДОБАВЛЕНО creationflags)
-                subprocess.Popen([path], creationflags=CREATE_NO_WINDOW)
-                print(tr("log_tm_launched"))
-            else:
-                 print(tr("error_no_tm_path"))
+    try:
+        print(tr("log_tm_launching"))
+        if path:
+            subprocess.Popen([path], creationflags=CREATE_NO_WINDOW)
+            print(tr("log_tm_launched"))
         else:
-            print(tr("log_tm_already_running"))
+             print(tr("error_no_tm_path"))
     except Exception as e:
         print(tr("log_tm_check_err", e=e))
 
-
+# Функция login_telemart остается без изменений
 def login_telemart(username: str, password: str, timeout: int = 20):
-    """
-    Вводит логин и пароль в Telemart.Client и нажимает кнопку Вход.
-    """
-
+    # ... (весь старый код login_telemart) ...
     def wait_for_login_box():
-        """Ждем появления поля логина"""
         print(tr("log_tm_wait_login"))
-        for attempt in range(180):  # range - секунды
+        for attempt in range(180):
             try:
                 spec = Desktop(backend="uia").window(title_re=r"^Telemart\.Client")
                 if spec.exists():
@@ -68,10 +59,8 @@ def login_telemart(username: str, password: str, timeout: int = 20):
         return None
 
     def perform_login(wrapper):
-        """Выполняем вход"""
         print(tr("log_tm_performing_login"))
         try:
-            # --- Логин ---
             login_box = next((ctrl for ctrl in wrapper.descendants(control_type="Edit")
                               if ctrl.element_info.automation_id == "LoginTextBox"), None)
             if not login_box:
@@ -79,7 +68,6 @@ def login_telemart(username: str, password: str, timeout: int = 20):
             login_box.set_text(username)
             print(tr("log_tm_login_entered"))
 
-            # --- Пароль ---
             password_box = next((ctrl for ctrl in wrapper.descendants(control_type="Edit")
                                  if ctrl.element_info.automation_id == "PasswordBoxEdit"), None)
             if not password_box:
@@ -87,7 +75,6 @@ def login_telemart(username: str, password: str, timeout: int = 20):
             password_box.set_text(password)
             print(tr("log_tm_pass_entered"))
 
-            # --- Кнопка Вход ---
             login_button = next((ctrl for ctrl in wrapper.descendants(control_type="Button")
                                  if ctrl.element_info.name == "Вход"), None)
             if not login_button:
@@ -100,18 +87,12 @@ def login_telemart(username: str, password: str, timeout: int = 20):
             print(tr("log_tm_login_err", e=e))
             return False
 
-    # Основной алгоритм
     max_cycles = 5
-
     for cycle in range(max_cycles):
         print(tr("log_tm_update_cycle", current=cycle + 1, max=max_cycles))
-
-        # Ждем появления поля логина
         wrapper = wait_for_login_box()
         if wrapper is None:
             continue
-
-        # Выполняем вход
         if perform_login(wrapper):
             print(tr("log_tm_login_ok"))
             return True
