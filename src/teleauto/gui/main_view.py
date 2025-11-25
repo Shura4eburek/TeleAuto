@@ -1,10 +1,12 @@
 # src/teleauto/gui/main_view.py
 import sys
+import webbrowser
 import customtkinter as ctk
 from src.teleauto.localization import tr
 from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY
 from .widgets import LEDCircle, TitleBox, StatusBox, TextboxLogger
 from .constants import VERSION
+
 
 class MainWindow(ctk.CTkFrame):
     def __init__(self, master_app):
@@ -14,7 +16,6 @@ class MainWindow(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=1);
         self.grid_columnconfigure(2, weight=0)
 
-        # Font styles
         f_label = (MAIN_FONT_FAMILY, 12)
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
 
@@ -31,10 +32,11 @@ class MainWindow(ctk.CTkFrame):
         self.version_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5));
         self.version_frame.pack_propagate(False)
 
-        # FIX: rely=0.43 (Подняли текст)
-        ctk.CTkLabel(self.version_frame, text=VERSION, text_color="#666666", font=f_label).place(relx=0.5,
-                                                                                                        rely=0.43,
-                                                                                                        anchor="center")
+        self.ver_label = ctk.CTkLabel(self.version_frame, text=VERSION, text_color="#666666", font=f_label,
+                                      cursor="hand2")
+        self.ver_label.place(relx=0.5, rely=0.43, anchor="center")
+        self.ver_label.bind("<Button-1>",
+                            lambda e: webbrowser.open("https://github.com/Shura4eburek/TeleAuto/releases"))
 
         # Update Status
         self.update_frame = ctk.CTkFrame(self.top_frame, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
@@ -43,13 +45,11 @@ class MainWindow(ctk.CTkFrame):
         self.update_frame.pack_propagate(False)
 
         self.update_inner = ctk.CTkFrame(self.update_frame, fg_color="transparent");
-        # FIX: rely=0.43 (Подняли контейнер)
         self.update_inner.place(relx=0.5, rely=0.43, anchor="center")
 
         ctk.CTkLabel(self.update_inner, text=tr("update_label"), text_color="#AAAAAA", font=f_label).pack(side="left",
                                                                                                           padx=(0, 8))
         self.update_led = LEDCircle(self.update_inner, size=15, fg_color=FRAME_BG);
-        # FIX: pady=(4, 0) (Опустили LED, чтобы скомпенсировать rely=0.43)
         self.update_led.pack(side="left", padx=(0, 8), pady=(4, 0));
         self.update_led.set_state("success")
         self.update_label = ctk.CTkLabel(self.update_inner, text=tr("update_actual"), text_color="#666666",
@@ -86,6 +86,8 @@ class MainWindow(ctk.CTkFrame):
         self.pritunl_status.grid(row=1, column=1, padx=(5, 5), pady=8, sticky="ew")
         self.pritunl_buttons_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent");
         self.pritunl_buttons_frame.grid(row=1, column=2, padx=(5, 0), pady=8, sticky="e")
+
+        # Кнопки профилей
         self.pritunl_btn_1 = ctk.CTkButton(self.pritunl_buttons_frame, text="P1", height=ROW_HEIGHT,
                                            corner_radius=CORNER_RADIUS, font=f_btn,
                                            command=lambda: self.master_app.on_pritunl_connect_click(0));
@@ -95,6 +97,13 @@ class MainWindow(ctk.CTkFrame):
         self.pritunl_btn_3 = ctk.CTkButton(self.pritunl_buttons_frame, text="P3", height=ROW_HEIGHT,
                                            corner_radius=CORNER_RADIUS, font=f_btn,
                                            command=lambda: self.master_app.on_pritunl_connect_click(2))
+
+        # --- НОВАЯ КНОПКА ОТМЕНЫ PRITUNL (скрыта по умолчанию) ---
+        self.pritunl_cancel_btn = ctk.CTkButton(self.pritunl_buttons_frame, text=tr("btn_cancel"), width=125,
+                                                height=ROW_HEIGHT,
+                                                corner_radius=CORNER_RADIUS, fg_color="#AA0000", hover_color="#880000",
+                                                font=f_btn,
+                                                command=self.master_app.on_cancel_pritunl_click)
 
         # Monitor
         self.monitor_title = TitleBox(self.content_frame, title="Monitor");
@@ -112,7 +121,6 @@ class MainWindow(ctk.CTkFrame):
         self.is_expanded = False
 
         # Bottom Status Bar
-        # ИЗМЕНЕНО: Прикрепляем к self (MainWindow), а не к content_frame. Ставим в row=3.
         self.bottom_bar = ctk.CTkFrame(self, height=ROW_HEIGHT, fg_color="transparent")
         self.bottom_bar.grid(row=3, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="ew")
 
@@ -153,9 +161,7 @@ class MainWindow(ctk.CTkFrame):
         self.is_expanded = True;
         current_w = self.master_app.winfo_width();
         self.master_app.geometry(f"{current_w}x600")
-        # Логи идут в row=2
         self.log_textbox.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew");
-        # Даем логам растягиваться, bottom_bar (row=3) будет прижат к низу
         self.grid_rowconfigure(2, weight=1)
         logger = TextboxLogger(self.log_textbox);
         sys.stdout = logger;
@@ -173,14 +179,6 @@ class MainWindow(ctk.CTkFrame):
             self.after(0, lambda: title_box.set_led(state))
             self.after(0, lambda: status_box.set_text_key(text_key, state))
 
-    def show_update_ready(self, version_tag):
-        """Меняет статус в верхней панели, когда обновление скачано"""
-        # Меняем цвет диода на желтый ("working")
-        self.update_led.set_state("working")
-
-        # Меняем текст на версию обновления
-        self.update_label.configure(text=f"Ready: {version_tag}", text_color="#E0E0E0")
-
     def update_net_status(self, is_connected, ping_ms):
         if is_connected:
             self.net_led.set_state("success")
@@ -190,6 +188,31 @@ class MainWindow(ctk.CTkFrame):
             self.ping_value_label.configure(text="-- ms", text_color="#666666")
 
     def show_update_ready(self, version_tag):
-        self.update_led.set_state("working")  # Желтый
-        self.update_label.configure(text=f"Ready: {version_tag}", text_color="#E0E0E0")
-        # Можно добавить тултип или изменить текст кнопки, если она есть
+        self.update_led.set_state("working")
+        self.update_label.destroy()
+        self.update_btn = ctk.CTkButton(self.update_inner, text=f"🔄 {version_tag}", width=80, height=20,
+                                        fg_color="#228B22", hover_color="#006400",
+                                        font=(MAIN_FONT_FAMILY, 11, "bold"),
+                                        command=self.master_app.install_update_now)
+        self.update_btn.pack(side="left")
+
+    # --- НОВЫЕ МЕТОДЫ УПРАВЛЕНИЯ КНОПКАМИ ---
+    def toggle_pritunl_ui(self, state):
+        """state: 'working' (показать Cancel) или 'normal' (вернуть как было)"""
+        if state == 'working':
+            self.pritunl_btn_1.pack_forget()
+            self.pritunl_btn_2.pack_forget()
+            self.pritunl_btn_3.pack_forget()
+            self.pritunl_cancel_btn.pack(side="left", padx=0)
+        else:
+            self.pritunl_cancel_btn.pack_forget()
+            # Кнопки P1-P3 восстановятся через update_main_window_buttons в App
+
+    def toggle_telemart_ui(self, state):
+        if state == 'working':
+            self.start_telemart_button.configure(text=tr("btn_cancel"), fg_color="#AA0000", hover_color="#880000",
+                                                 state="normal", command=self.master_app.on_cancel_telemart_click)
+        else:
+            self.start_telemart_button.configure(text=tr("btn_start"), fg_color=["#3B8ED0", "#1F6AA5"],
+                                                 hover_color=["#36719F", "#144870"],
+                                                 command=self.master_app.on_start_telemart_click)
