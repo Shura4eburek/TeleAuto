@@ -1,8 +1,9 @@
+# src/teleauto/gui/app.py
 import sys
 import os
 import threading
 from tkinter import messagebox
-# --- PATH FIX ---
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
 if project_root not in sys.path:
@@ -30,9 +31,12 @@ from src.teleauto.gui.fonts import load_custom_font
 from src.teleauto.updater import check_and_download, schedule_update_on_exit
 from src.teleauto.gui.constants import VERSION
 
+
 class App(ctk.CTk):
     def __init__(self):
-        load_custom_font("Unbounded-Regular.ttf")
+        # ИСПРАВЛЕНО: Указываем точное имя файла, как в .spec
+        load_custom_font("Unbounded-VariableFont_wght.ttf")
+
         super().__init__()
         self.creds = load_credentials()
         self.decrypted_creds = None
@@ -42,6 +46,10 @@ class App(ctk.CTk):
         self.vpn_is_connected = False
         self.update_ready = False
         self.new_version_tag = None
+
+        # ФЛАГИ ОТМЕНЫ
+        self.pritunl_cancel_event = threading.Event()
+        self.telemart_cancel_event = threading.Event()
 
         threading.Thread(target=self.bg_update_check, daemon=True).start()
 
@@ -66,10 +74,10 @@ class App(ctk.CTk):
                     self.quit()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # Start network monitoring
         self.net_monitor_running = True
         threading.Thread(target=self.network_monitor_loop, daemon=True).start()
 
+    # ... (Остальной код без изменений) ...
     def config_saved(self, pin_used):
         self.creds = load_credentials()
         if pin_used:
@@ -101,6 +109,9 @@ class App(ctk.CTk):
 
     def update_main_window_buttons(self, is_busy=False):
         if not self.main_frame: return
+
+        self.main_frame.toggle_pritunl_ui('normal')
+
         secrets = self.decrypted_creds[2]
         buttons = [self.main_frame.pritunl_btn_1, self.main_frame.pritunl_btn_2, self.main_frame.pritunl_btn_3]
         active = [i for i, s in enumerate(secrets) if s];
@@ -116,6 +127,10 @@ class App(ctk.CTk):
                 btn.configure(width=w, height=ROW_HEIGHT);
                 btn.pack(side="left", padx=px)
                 btn.configure(state="disabled" if (is_busy or self.vpn_is_connected) else "normal")
+
+        if not is_busy:
+            self.main_frame.toggle_telemart_ui('normal')
+
         state = "disabled" if is_busy else ("normal" if self.vpn_is_connected else "disabled")
         self.main_frame.start_telemart_button.configure(state=state);
         self.main_frame.disconnect_button.configure(state=state)
@@ -128,13 +143,7 @@ class App(ctk.CTk):
     def open_settings_window(self):
         SettingsWindow(self)
 
-    def on_closing(self):
-        self.net_monitor_running = False  # Stop net monitor
-        if self.monitor_instance: self.monitor_instance.stop()
-        self.quit()
-
     def network_monitor_loop(self):
-        """Background thread to check internet ping."""
         while self.net_monitor_running:
             try:
                 connected, ping = check_internet_ping()
@@ -146,14 +155,26 @@ class App(ctk.CTk):
 
     def on_pritunl_connect_click(self, idx):
         if not self.main_frame.is_expanded: self.main_frame.expand_log()
-        self.update_main_window_buttons(is_busy=True);
+        self.pritunl_cancel_event.clear()
+        self.main_frame.toggle_pritunl_ui('working')
+        self.main_frame.start_telemart_button.configure(state="disabled")
+        self.main_frame.disconnect_button.configure(state="disabled")
         self.set_ui_status("monitor", "waiting", "status_waiting");
         threading.Thread(target=self.run_pritunl, args=(idx,), daemon=True).start()
 
+    def on_cancel_pritunl_click(self):
+        self.pritunl_cancel_event.set()
+        print(tr("log_op_cancelled"))
+
     def on_start_telemart_click(self):
         if not self.main_frame.is_expanded: self.main_frame.expand_log()
-        self.main_frame.start_telemart_button.configure(state="disabled");
+        self.telemart_cancel_event.clear()
+        self.main_frame.toggle_telemart_ui('working')
         threading.Thread(target=self.run_telemart, daemon=True).start()
+
+    def on_cancel_telemart_click(self):
+        self.telemart_cancel_event.set()
+        print(tr("log_op_cancelled"))
 
     def on_disconnect_click(self, startup=False):
         if not self.main_frame.is_expanded and not startup: self.main_frame.expand_log()
@@ -177,45 +198,79 @@ class App(ctk.CTk):
     def run_pritunl(self, idx):
         try:
             self.set_ui_status("pritunl", "waiting", "status_working")
-            if not wait_for_internet(): self.set_ui_status("pritunl", "error", "status_no_net"); self.set_ui_status(
-                "monitor", "off", "status_waiting"); self.update_main_window_buttons(); return
+            if not wait_for_internet(cancel_event=self.pritunl_cancel_event):
+                if self.pritunl_cancel_event.is_set():
+                    self.set_ui_status("pritunl", "off", "status_cancelled")
+                else:
+                    self.set_ui_status("pritunl", "error", "status_no_net")
+                self.set_ui_status("monitor", "off", "status_waiting")
+                self.update_main_window_buttons()
+                return
+
             secret = self.decrypted_creds[2][idx];
             attempt = 0
             while attempt < 5 and not self.vpn_is_connected:
+                if self.pritunl_cancel_event.is_set():
+                    self.set_ui_status("pritunl", "off", "status_cancelled")
+                    self.update_main_window_buttons()
+                    return
+
+                if attempt > 0:
+                    print("Предыдущая попытка не удалась, перезапускаем Pritunl...")
+                    vpn.force_kill_pritunl()
+
                 attempt += 1;
                 self.set_ui_status("pritunl", "working", "status_working");
                 print(f"{tr('log_vpn_attempt')} {attempt}...")
+
                 vpn.start_pritunl()
+                if self.pritunl_cancel_event.is_set(): break
+
                 if not vpn.click_pritunl_connect(profile_index=idx): time.sleep(2); continue
+                if self.pritunl_cancel_event.is_set(): break
+
                 ok, ntp = check_time_drift();
                 totp = get_current_totp(secret, ntp_time=ntp)
+
                 if not vpn.input_2fa_code_and_reconnect(totp): time.sleep(2); continue
-                time.sleep(10)
-                if vpn.check_vpn_connection(): self.vpn_is_connected = True; self.set_ui_status("pritunl", "success",
-                                                                                                "status_active"); print(
-                    tr("log_vpn_connected"))
-            if not self.vpn_is_connected:
+
+                for _ in range(20):
+                    if self.pritunl_cancel_event.is_set(): break
+                    time.sleep(0.5)
+
+                if self.pritunl_cancel_event.is_set(): break
+
+                if vpn.check_vpn_connection():
+                    self.vpn_is_connected = True;
+                    self.set_ui_status("pritunl", "success", "status_active");
+                    print(tr("log_vpn_connected"))
+
+            if self.pritunl_cancel_event.is_set():
+                self.set_ui_status("pritunl", "off", "status_cancelled")
+                self.set_ui_status("monitor", "off", "status_waiting")
+            elif not self.vpn_is_connected:
                 self.set_ui_status("pritunl", "error", "status_error");
-                self.set_ui_status("monitor", "off",
-                                   "status_waiting")
+                self.set_ui_status("monitor", "off", "status_waiting")
             else:
                 self.start_monitor(idx, secret)
+
             self.update_main_window_buttons()
         except Exception as e:
             print(e);
             self.set_ui_status("pritunl", "error", "status_error");
-            self.set_ui_status("monitor", "off",
-                               "status_waiting");
+            self.set_ui_status("monitor", "off", "status_waiting");
             self.update_main_window_buttons()
 
     def run_telemart(self):
         try:
             if not self.vpn_is_connected: return
 
-            # Распаковка с путем
-            u, p, _, _, _, tm_path = self.decrypted_creds
+            if self.telemart_cancel_event.is_set():
+                self.set_ui_status("telemart", "off", "status_cancelled")
+                self.update_main_window_buttons()
+                return
 
-            # Проверка пути
+            u, p, _, _, _, tm_path = self.decrypted_creds
             if not tm_path or not os.path.exists(tm_path):
                 self.after(0, lambda: messagebox.showerror("Error", tr("error_no_tm_path")))
                 return
@@ -223,10 +278,15 @@ class App(ctk.CTk):
             self.set_ui_status("telemart", "working", "status_working");
             print(tr("log_tm_start"));
 
-            # Передаем путь
             start_telemart(tm_path);
 
-            time.sleep(5)
+            for _ in range(10):
+                if self.telemart_cancel_event.is_set():
+                    self.set_ui_status("telemart", "off", "status_cancelled")
+                    self.update_main_window_buttons()
+                    return
+                time.sleep(0.5)
+
             print(tr("log_tm_login"));
             if login_telemart(u, p):
                 self.set_ui_status("telemart", "success", "status_success");
@@ -237,7 +297,7 @@ class App(ctk.CTk):
             print(e);
             self.set_ui_status("telemart", "error", "status_error")
         finally:
-            self.main_frame.start_telemart_button.configure(state="normal")
+            self.update_main_window_buttons()
 
     def start_monitor(self, idx, secret):
         self.set_ui_status("monitor", "working", "status_working");
@@ -250,38 +310,26 @@ class App(ctk.CTk):
             self.set_ui_status("monitor", "error", "status_error")
 
     def bg_update_check(self):
-        """Фоновая проверка обновлений через GitHub"""
         try:
-            # Вызываем реальную функцию проверки
             downloaded, tag = check_and_download(VERSION)
-
             if downloaded:
                 self.update_ready = True
                 self.new_version_tag = tag
-                # Сообщаем GUI, что пора менять цвет лампочки
                 if self.main_frame:
-                    self.main_frame.after(0, self.notify_update_ui)
+                    self.main_frame.after(0, lambda: self.main_frame.show_update_ready(self.new_version_tag))
         except Exception:
             pass
 
-    def notify_update_ui(self):
-        """Сообщаем GUI, что обновление скачано"""
-        if self.main_frame:
-            # Метод, который мы добавим в MainWindow
-            self.main_frame.show_update_ready(self.new_version_tag)
+    def install_update_now(self):
+        if messagebox.askyesno("Update", "Перезапустить программу для установки обновления?"):
+            schedule_update_on_exit()
+            self.on_closing()
 
     def on_closing(self):
-        """Перехват закрытия окна"""
-        if self.update_ready:
-            # Если обновление скачано, спрашиваем или просто уведомляем
-            if messagebox.askyesno("Обновление",
-                                   f"Загружена версия {self.new_version_tag}.\nУстановить её сейчас?"):
-                schedule_update_on_exit()
-
-        # Стандартное закрытие
         self.net_monitor_running = False
         if self.monitor_instance: self.monitor_instance.stop()
         self.quit()
+
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("Dark")
