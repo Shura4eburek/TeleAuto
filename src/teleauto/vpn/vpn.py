@@ -7,12 +7,21 @@ from pywinauto import Desktop
 from pywinauto.findwindows import ElementNotFoundError
 from src.teleauto.localization import tr
 
-# --- ДОБАВЬТЕ ЭТУ КОНСТАНТУ ---
 CREATE_NO_WINDOW = 0x08000000
+
+
+def force_kill_pritunl():
+    """Принудительно убивает процесс Pritunl"""
+    try:
+        subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'],
+                       capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+        time.sleep(2)
+    except Exception:
+        pass
+
 
 def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
     try:
-        # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
         result = subprocess.run(['tasklist'], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
         process_found = 'pritunl.exe' in result.stdout.lower()
         window_found = False
@@ -31,19 +40,13 @@ def start_pritunl(path=r"C:\Program Files (x86)\Pritunl\pritunl.exe"):
         except Exception as e:
             print(tr("log_vpn_search_error", e=e))
 
+        # Логика: если процесса нет ИЛИ (процесс есть, но окна нет/оно скрыто) -> перезапуск
         if not process_found or (process_found and not (window_found and window_visible)):
-            if process_found and not window_visible:
+            if process_found:
                 print(tr("log_vpn_restart"))
-                try:
-                    # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
-                    subprocess.run(['taskkill', '/f', '/im', 'pritunl.exe'],
-                                   capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                    time.sleep(2)
-                except Exception as e:
-                    print(tr("log_vpn_kill_error", e=e))
+                force_kill_pritunl()  # Используем вынесенную функцию
 
             print(tr("log_vpn_start"))
-            # ДОБАВЛЕНО creationflags=CREATE_NO_WINDOW
             subprocess.Popen([path], creationflags=CREATE_NO_WINDOW)
 
             for attempt in range(30):
@@ -67,6 +70,17 @@ def click_pritunl_connect(profile_index=0, window_title_re=".*Pritunl Client.*")
         app.wait("exists ready visible enabled", timeout=30)
         app.set_focus()
 
+        # --- ФИКС 1: Проверка, не нажата ли уже кнопка (есть ли поле ввода кода) ---
+        try:
+            # Ищем поле ввода (Edit), которое появляется только после нажатия Connect
+            edit_box = app.child_window(control_type="Edit")
+            if edit_box.exists() and edit_box.is_visible():
+                print("Поле ввода 2FA уже активно. Пропускаем нажатие Connect.")
+                return True
+        except:
+            pass
+        # ---------------------------------------------------------------------------
+
         for attempt in range(10):
             time.sleep(1)
             try:
@@ -77,7 +91,6 @@ def click_pritunl_connect(profile_index=0, window_title_re=".*Pritunl Client.*")
             filtered_buttons = []
             for btn in all_buttons:
                 try:
-                    # Проверяем текст кнопки и родителя, чтобы исключить лишние
                     if btn.window_text().endswith("Connect") and btn.is_visible() and btn.is_enabled():
                         parent = btn.parent()
                         if parent and "profile connect" not in parent.window_text().lower():
@@ -96,7 +109,9 @@ def click_pritunl_connect(profile_index=0, window_title_re=".*Pritunl Client.*")
         return False
 
 
+# Остальные функции (input_2fa_code_and_reconnect, disconnect_vpn и др.) оставляем без изменений
 def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
+    # ... (код тот же) ...
     try:
         app = Desktop(backend="uia").window(title_re=window_title_re)
         app.wait("exists ready", timeout=15)
@@ -134,6 +149,7 @@ def input_2fa_code_and_reconnect(code, window_title_re=".*Pritunl.*"):
 
 
 def disconnect_vpn(window_title_re=".*Pritunl Client.*"):
+    # ... (код тот же) ...
     try:
         start_pritunl()
         app = Desktop(backend="uia").window(title_re=window_title_re)
@@ -162,6 +178,7 @@ def disconnect_vpn(window_title_re=".*Pritunl Client.*"):
 
 
 def wait_for_disconnect(timeout_sec=30):
+    # ... (код тот же) ...
     start_time = time.time()
     while check_vpn_connection():
         if time.time() - start_time > timeout_sec:
@@ -172,6 +189,7 @@ def wait_for_disconnect(timeout_sec=30):
 
 
 def check_vpn_connection():
+    # ... (код тот же) ...
     keywords = ["TAP-Windows Adapter V9", "Pritunl"]
     addrs = psutil.net_if_addrs()
     stats = psutil.net_if_stats()
@@ -180,7 +198,6 @@ def check_vpn_connection():
             if kw.lower() in adapter.lower():
                 if adapter in stats and stats[adapter].isup:
                     for addr in addrs[adapter]:
-                        # Проверяем наличие реального IP (не 169.254...)
                         if addr.family == socket.AF_INET and not addr.address.startswith("169.254"):
                             return True
     return False
