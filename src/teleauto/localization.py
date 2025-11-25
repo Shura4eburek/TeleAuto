@@ -3,18 +3,42 @@ import emoji
 
 CURRENT_LANG = "ru"
 
-# Формируем словарь с настоящими эмодзи через библиотеку
 LANG_CODES = {
     f"{emoji.emojize(':pile_of_poo:')} Russian": "ru",
     f"{emoji.emojize(':United_States:')} English": "en",
     f"{emoji.emojize(':Ukraine:')} Ukrainian": "ua"
 }
-# Обратный маппинг (ru -> 💩 Russian)
 LANG_NAMES = {v: k for k, v in LANG_CODES.items()}
 
 TRANSLATIONS = {
     "ru": {
-        # GUI
+        # ... (существующие ключи) ...
+        "btn_cancel": "Отмена",
+        "status_cancelled": "Отменено",
+        "log_op_cancelled": "Операция отменена пользователем.",
+        # ...
+    },
+    "en": {
+        # ...
+        "btn_cancel": "Cancel",
+        "status_cancelled": "Cancelled",
+        "log_op_cancelled": "Operation cancelled by user.",
+        # ...
+    },
+    "ua": {
+        # ...
+        "btn_cancel": "Скасувати",
+        "status_cancelled": "Скасовано",
+        "log_op_cancelled": "Операцію скасовано користувачем.",
+        # ...
+    }
+}
+# Добавляем новые ключи в существующие словари (чтобы не дублировать весь файл, я привел только новые строки,
+# но в реальном коде они просто добавляются в общий список)
+
+# --- ПОЛНЫЙ ОБНОВЛЕННЫЙ СПИСОК (для вставки) ---
+TRANSLATIONS = {
+    "ru": {
         "window_title_setup": "Первичная настройка",
         "window_title_pin": "Ввод PIN",
         "window_title_settings": "Настройки",
@@ -59,7 +83,10 @@ TRANSLATIONS = {
         "lang_label": "Язык / Language:",
         "restart_title": "Требуется перезапуск",
         "restart_msg": "Язык интерфейса изменен.\nПожалуйста, перезапустите программу для применения настроек.",
-
+        # NEW
+        "btn_cancel": "Отмена",
+        "status_cancelled": "Отменено",
+        "log_op_cancelled": "Операция отменена пользователем.",
         # LOGS
         "log_system_start": "--- Запуск Системи ---",
         "log_net_checking": "Проверка подключения к интернету через {host}...",
@@ -136,7 +163,7 @@ TRANSLATIONS = {
         "log_monitor_start": "Запуск монитора...",
     },
     "en": {
-        # GUI
+        # ... (Старые ключи) ...
         "window_title_setup": "Initial Setup",
         "window_title_pin": "Enter PIN",
         "window_title_settings": "Settings",
@@ -181,8 +208,11 @@ TRANSLATIONS = {
         "lang_label": "Language:",
         "restart_title": "Restart Required",
         "restart_msg": "Language changed.\nPlease restart the application to apply settings.",
-
-        # LOGS
+        # NEW
+        "btn_cancel": "Cancel",
+        "status_cancelled": "Cancelled",
+        "log_op_cancelled": "Operation cancelled by user.",
+        # LOGS (копируем старые значения, чтобы не сломать)
         "log_system_start": "--- System Start ---",
         "log_net_checking": "Checking internet via {host}...",
         "log_net_available": "Internet available.",
@@ -258,7 +288,7 @@ TRANSLATIONS = {
         "log_monitor_start": "Starting Monitor...",
     },
     "ua": {
-        # GUI
+        # ... (Старые ключи) ...
         "window_title_setup": "Початкове налаштування",
         "window_title_pin": "Введення PIN",
         "window_title_settings": "Налаштування",
@@ -373,6 +403,10 @@ TRANSLATIONS = {
         "log_tm_login": "Вхід в акаунт...",
         "log_tm_success": "Вхід виконано!",
         "log_monitor_start": "Запуск монітора...",
+        # NEW
+        "btn_cancel": "Скасувати",
+        "status_cancelled": "Скасовано",
+        "log_op_cancelled": "Операцію скасовано користувачем.",
     }
 }
 
