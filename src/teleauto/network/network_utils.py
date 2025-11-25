@@ -6,13 +6,15 @@ import platform
 from src.teleauto.localization import tr
 
 
-# Существующая функция wait_for_internet остается без изменений...
-def wait_for_internet(host="1.1.1.1", timeout=5, retry_interval=5):
-    # ... ваш старый код ...
+# --- ОБНОВЛЕНО: добавлен cancel_event ---
+def wait_for_internet(host="1.1.1.1", timeout=5, retry_interval=5, cancel_event=None):
     print(tr("log_net_checking", host=host))
     while True:
+        # ПРОВЕРКА ОТМЕНЫ
+        if cancel_event and cancel_event.is_set():
+            return False
+
         try:
-            # Windows флаг создания окна, чтобы не мигала консоль
             startupinfo = None
             if platform.system() == "Windows":
                 startupinfo = subprocess.STARTUPINFO()
@@ -32,17 +34,17 @@ def wait_for_internet(host="1.1.1.1", timeout=5, retry_interval=5):
                 print(tr("log_net_unavailable"))
         except Exception as e:
             print(tr("log_net_ping_err", e=e))
-        time.sleep(retry_interval)
+
+        # Ждем с возможностью быстрого выхода
+        for _ in range(retry_interval * 2):  # проверяем каждые 0.5 сек
+            if cancel_event and cancel_event.is_set():
+                return False
+            time.sleep(0.5)
 
 
-# --- НОВАЯ ФУНКЦИЯ ---
+# check_internet_ping оставляем без изменений
 def check_internet_ping(host="1.1.1.1", timeout=1000):
-    """
-    Возвращает кортеж (connected: bool, ping_ms: int/None).
-    Timeout указывается в миллисекундах.
-    """
     try:
-        # Скрываем окно консоли при вызове ping (для Windows)
         startupinfo = None
         if platform.system() == "Windows":
             startupinfo = subprocess.STARTUPINFO()
@@ -61,8 +63,6 @@ def check_internet_ping(host="1.1.1.1", timeout=1000):
 
         output = result.stdout
         if "TTL=" in output:
-            # Ищем время (time=12ms или время=12мс или time<1ms)
-            # Регулярка ищет число перед ms/мс
             match = re.search(r"(?:time|время)[=<]([\d\.]+)\s*(?:ms|мс)", output.lower())
             ping = int(float(match.group(1))) if match else 0
             return True, ping
