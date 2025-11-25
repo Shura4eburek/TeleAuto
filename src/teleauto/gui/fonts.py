@@ -3,7 +3,6 @@ import os
 import sys
 import ctypes
 
-
 def resource_path(relative_path):
     """Для работы внутри PyInstaller EXE"""
     try:
@@ -12,15 +11,15 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-
-def load_custom_font(font_name="Unbounded-Regular.ttf"):
+# ИСПРАВЛЕНО: Обновлено имя файла по умолчанию
+def load_custom_font(font_name="Unbounded-VariableFont_wght.ttf"):
     """Загружает шрифт в память только для этой сессии"""
     font_path = resource_path(font_name)
     if not os.path.exists(font_path):
         return False
 
-    # FR_PRIVATE = 0x10 (шрифт виден только этому процессу, не требует прав админа для установки)
     try:
+        # FR_PRIVATE = 0x10
         num = ctypes.windll.gdi32.AddFontResourceExW(
             ctypes.c_wchar_p(font_path),
             ctypes.c_uint(0x10),
