@@ -22,9 +22,6 @@
 * **🛒 Telemart Automation:**
     * Auto-launch and auto-login to Telemart Client.
     * Handles window detection and input fields securely.
-* **🔒 Security:**
-    * **AES Encryption:** Credentials and secrets are encrypted.
-    * **PIN Protection:** Application startup and settings are protected by a PIN code.
 * **🚀 Portable:**
     * Single EXE file.
     * No installation required (fonts included).
@@ -32,12 +29,20 @@
 * **🌐 Localization:**
     * Interface available in English, Russian, and Ukrainian.
 
+## 🔒 Security Features
+* **The following data protection mechanisms have been implemented in this project:**
+  * Memory Security: Decrypted credentials are not stored persistently in application memory. They are decrypted on-the-fly only when needed and are immediately cleared from local variables after use.
+  * Strong Key Derivation (Argon2id): The Argon2id algorithm is used to protect the master PIN, providing superior resistance against GPU/ASIC-based brute-force attacks compared to legacy methods.
+  * AES-256-CBC Encryption with Unique IV: Each configuration field is encrypted independently using its own random Initialization Vector (IV). This prevents pattern-based cryptanalysis.
+  * Log Sanitization: The application is configured to mask sensitive information (passwords, tokens) when outputting system messages or errors to the console.
+  * Data Isolation: Access to automation features is protected by a PIN code. Without it, decrypting Telemart credentials is impossible, even with direct access to the configuration file.
+
 ## 🛠️ Tech Stack
 
 * **Python 3.11**
 * **GUI:** `CustomTkinter` (Modern Dark UI).
 * **Automation:** `pywinauto` (Windows GUI automation).
-* **Security:** `bcrypt`, `cryptography` (Fernet).
+* **Security:** `argon2-cffi`, `bcrypt`, `cryptography` (AES-256-CBC).
 * **Network:** `pyotp` (2FA), `requests`.
 
 ## 🚀 How to Use
