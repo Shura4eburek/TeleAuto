@@ -1,3 +1,4 @@
+# src/teleauto/gui/windows.py
 import customtkinter as ctk
 from tkinter import messagebox
 from src.teleauto.credentials import save_credentials, load_credentials, verify_pin, decrypt_credentials, \
@@ -13,7 +14,7 @@ class ConfigWindow(ctk.CTkToplevel):
         super().__init__(master_app)
         self.master_app = master_app
         self.title(tr("window_title_setup"))
-        self.geometry("450x750")  # Увеличил высоту
+        self.geometry("450x750")
         self.transient(master_app)
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
@@ -21,12 +22,10 @@ class ConfigWindow(ctk.CTkToplevel):
         self.main_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Font config
         f_label = (MAIN_FONT_FAMILY, 12)
         f_entry = (MAIN_FONT_FAMILY, 12)
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
 
-        # Language
         self.lang_frame = SettingsGroup(self.main_frame, title_key="lang_label")
         self.lang_frame.pack(fill="x", pady=(0, 10))
 
@@ -36,7 +35,6 @@ class ConfigWindow(ctk.CTkToplevel):
                                             font=EMOJI_FONT, dropdown_font=EMOJI_FONT)
         self.lang_combo.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
-        # Security
         self.sec_frame = SettingsGroup(self.main_frame, title_key="group_security")
         self.sec_frame.pack(fill="x", pady=(0, 10))
         self.lbl_pin = ctk.CTkLabel(self.sec_frame, text=tr("pin_label"), font=f_label)
@@ -48,7 +46,6 @@ class ConfigWindow(ctk.CTkToplevel):
         self.pin_repeat_entry = ctk.CTkEntry(self.sec_frame, show="*", font=f_entry)
         self.pin_repeat_entry.grid(row=2, column=1, padx=10, pady=(5, 15), sticky="ew")
 
-        # VPN
         self.vpn_frame = SettingsGroup(self.main_frame, title_key="group_vpn")
         self.vpn_frame.pack(fill="x", pady=(0, 10))
         self.lbl_sec1 = ctk.CTkLabel(self.vpn_frame, text=tr("secret_1"), font=f_label)
@@ -67,14 +64,12 @@ class ConfigWindow(ctk.CTkToplevel):
                                      text_color="gray")
         self.lbl_hint.grid(row=4, column=0, columnspan=2, pady=(5, 15))
 
-        # Telemart
         self.tm_frame = SettingsGroup(self.main_frame, title_key="group_tm")
         self.tm_frame.pack(fill="x", pady=(0, 10))
         self.telemart_checkbox = ctk.CTkCheckBox(self.tm_frame, text=tr("auto_start_tm"), font=f_label,
                                                  command=self.toggle_login_fields)
         self.telemart_checkbox.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="w")
 
-        # Путь к файлу
         self.lbl_path = ctk.CTkLabel(self.tm_frame, text=tr("tm_path_label"), font=f_label)
         self.lbl_path.grid(row=2, column=0, padx=10, pady=5, sticky="w")
         self.path_entry = ctk.CTkEntry(self.tm_frame, font=f_entry)
@@ -155,9 +150,8 @@ class PinWindow(ctk.CTkToplevel):
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
 
-        # Font config
         f_msg = (MAIN_FONT_FAMILY, 13)
-        f_entry = (MAIN_FONT_FAMILY, 14, "bold")  # PIN крупнее
+        f_entry = (MAIN_FONT_FAMILY, 14, "bold")
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
 
         self.frame = ctk.CTkFrame(self, fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR,
@@ -174,13 +168,10 @@ class PinWindow(ctk.CTkToplevel):
 
     def check(self, event=None):
         entered_pin = self.pin_entry.get()
+        # ИСПРАВЛЕНО: Передаем в app.py строку PIN, а не расшифрованные данные
         if verify_pin(self.master_app.creds.get("pin_hash"), entered_pin):
-            try:
-                data = decrypt_credentials(self.master_app.creds, entered_pin)
-                self.destroy()
-                self.master_app.pin_unlocked(data)
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            self.destroy()
+            self.master_app.pin_unlocked(entered_pin)
         else:
             messagebox.showerror("Error", tr("error_wrong_pin"))
 
@@ -199,7 +190,6 @@ class SettingsWindow(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # Fonts
         f_label = (MAIN_FONT_FAMILY, 12)
         f_entry = (MAIN_FONT_FAMILY, 12)
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
@@ -253,7 +243,6 @@ class SettingsWindow(ctk.CTkToplevel):
                                   command=self.upd)
         self.cb.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="w")
 
-        # Путь к файлу
         self.lbl_path = ctk.CTkLabel(self.tm_frame, text=tr("tm_path_label"), font=f_label)
         self.lbl_path.grid(row=2, column=0, padx=10, pady=5, sticky="w")
         self.path_ent = ctk.CTkEntry(self.tm_frame, textvariable=self.tm_path_var, state="disabled", font=f_entry)
@@ -302,6 +291,7 @@ class SettingsWindow(ctk.CTkToplevel):
     def unlock(self, no_pin=False):
         try:
             pin_val = None if no_pin else self.pin_ent.get().strip()
+            # ПРИМЕЧАНИЕ: Здесь расшифровка нужна локально для заполнения полей настроек
             d = decrypt_credentials(self.master_app.creds, pin_val)
             self.lv.set(d[0])
             self.pv.set(d[1])
@@ -316,6 +306,8 @@ class SettingsWindow(ctk.CTkToplevel):
             self.save_btn.configure(state="normal")
             self.upd()
             if not no_pin: self.pin_frame.grid_forget()
+            # Очистка локальных данных после заполнения UI
+            del d
         except:
             messagebox.showerror("Error", tr("error_wrong_pin"))
 
@@ -326,7 +318,8 @@ class SettingsWindow(ctk.CTkToplevel):
                              self.cb.get() == 1, language=self.selected_lang,
                              telemart_path=self.tm_path_var.get())
             self.master_app.creds = load_credentials()
-            self.master_app.decrypted_creds = decrypt_credentials(self.master_app.creds, pin)
+            # ИСПРАВЛЕНО: Обновляем только сохраненный PIN, а не расшифрованные данные
+            self.master_app.user_pin = pin
             self.master_app.update_main_window_buttons()
             if self.selected_lang != self.initial_lang: messagebox.showinfo(tr("restart_title"), tr("restart_msg"))
             self.destroy()
