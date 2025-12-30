@@ -389,3 +389,4 @@ credentials.json
 /build/TeleAuto/warn-TeleAuto.txt
 /build/TeleAuto/xref-TeleAuto.html
 /src/teleauto/TeleAuto_new.exe
+!/src/teleauto/temp/
