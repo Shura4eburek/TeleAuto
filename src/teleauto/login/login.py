@@ -52,7 +52,6 @@ def login_telemart(username: str, password: str, timeout: int = 20):
                     print(tr("log_tm_window_not_found", attempt=attempt + 1))
                     time.sleep(1)
             except Exception as e:
-                except Exception:
                 print(tr("log_tm_login_err", e="[REDACTED]"))
 
         print(tr("log_tm_timeout"))
