@@ -1,419 +1,283 @@
 # src/teleauto/localization.py
-import emoji
+import locale
 
+# Глобальная переменная для текущего языка
 CURRENT_LANG = "ru"
 
 LANG_CODES = {
-    f"{emoji.emojize(':pile_of_poo:')} Russian": "ru",
-    f"{emoji.emojize(':United_States:')} English": "en",
-    f"{emoji.emojize(':Ukraine:')} Ukrainian": "ua"
+    "Russian": "ru",
+    "English": "en",
+    "Ukrainian": "ua"
 }
+
 LANG_NAMES = {v: k for k, v in LANG_CODES.items()}
 
 TRANSLATIONS = {
     "ru": {
-        # ... (существующие ключи) ...
-        "btn_cancel": "Отмена",
-        "status_cancelled": "Отменено",
-        "log_op_cancelled": "Операция отменена пользователем.",
-        # ...
-    },
-    "en": {
-        # ...
-        "btn_cancel": "Cancel",
-        "status_cancelled": "Cancelled",
-        "log_op_cancelled": "Operation cancelled by user.",
-        # ...
-    },
-    "ua": {
-        # ...
-        "btn_cancel": "Скасувати",
-        "status_cancelled": "Скасовано",
-        "log_op_cancelled": "Операцію скасовано користувачем.",
-        # ...
-    }
-}
-# Добавляем новые ключи в существующие словари (чтобы не дублировать весь файл, я привел только новые строки,
-# но в реальном коде они просто добавляются в общий список)
-
-# --- ПОЛНЫЙ ОБНОВЛЕННЫЙ СПИСОК (для вставки) ---
-TRANSLATIONS = {
-    "ru": {
-        "window_title_setup": "Первичная настройка",
-        "window_title_pin": "Ввод PIN",
+        "window_title_setup": "Первоначальная настройка",
         "window_title_settings": "Настройки",
-        "pin_label": "PIN-код:",
-        "pin_repeat": "Повторите PIN:",
-        "pin_enter_msg": "Введите ваш PIN-код:",
-        "secret_1": "Секрет 2FA (Профиль 1):",
-        "net_status_label": "Интернет",
-        "net_ping_label": "Ping:",
-        "secret_2": "Секрет 2FA (Профиль 2):",
-        "secret_3": "Секрет 2FA (Профиль 3):",
-        "secret_hint": "Заполняйте по порядку профилей в Pritunl",
-        "auto_start_tm": "Автозапуск Telemart",
-        "tm_path_label": "Путь к Telemart.exe:",
-        "btn_browse": "Выбрать...",
+        "window_title_pin": "Вход",
+
+        "lang_label": "Язык / Language",
+        "group_security": "Безопасность",
+        "group_vpn": "Настройки VPN (Pritunl)",
+        "group_tm": "Настройки Telemart",
+        "group_access": "Доступ",
+        "group_time": "Синхронизация времени",
+
+        "pin_label": "Придумайте PIN-код:",
+        "pin_repeat": "Повторите PIN-код:",
+        "pin_enter_msg": "PIN-код",
+        "unlock_btn": "Разблокировать",
+
+        "auto_start_tm": "Авто-запуск Telemart",
+        "tm_path_label": "Путь к Telemart (.exe):",
         "login": "Логин:",
         "password": "Пароль:",
-        "save_btn": "Сохранить и продолжить",
+
+        "save_btn": "Сохранить и Запустить",
         "save_changes_btn": "Сохранить изменения",
-        "unlock_btn": "Разблокировать",
         "delete_btn": "Сброс данных",
-        "delete_confirm": "Вы уверены? Это удалит все данные.",
-        "error_pin_mismatch": "PIN коды не совпадают.",
-        "error_no_secret": "Укажите хотя бы один секрет 2FA.",
-        "error_wrong_pin": "Неверный PIN.",
-        "error_no_tm_path": "Не указан путь к файлу Telemart Client!",
-        "group_security": "БЕЗОПАСНОСТЬ",
-        "group_vpn": "VPN ПРОФИЛИ (2FA)",
-        "group_tm": "TELEMART AUTOMATION",
-        "group_access": "ДОСТУП К НАСТРОЙКАМ",
-        "status_waiting": "Ожидание",
-        "status_off": "Отключен",
+
+        "offset_label": "Ручное смещение (сек):",
+        "offset_hint": "(коррекция +/- секунд)",
+        "label_pin_short": "PIN:",
+
+        "error_pin_mismatch": "PIN-коды не совпадают!",
+        "error_wrong_pin": "Неверный PIN-код!",
+        "error_no_tm_path": "Путь к Telemart не указан!",
+        "delete_confirm": "Вы уверены? Это удалит все сохраненные данные и закроет программу.",
+
+        "restart_title": "Язык изменен",
+        "restart_msg": "Пожалуйста, перезапустите приложение, чтобы применить язык полностью.",
+
+        "btn_start": "Start",
+        "btn_cancel": "Cancel",
+        "btn_disconnect": "Disconnect",
+        "net_status_label": "Интернет:",
+        "net_ping_label": "Ping:",
+
+        "status_waiting": "Ожидание...",
         "status_working": "Работа...",
         "status_success": "Успешно",
         "status_error": "Ошибка",
-        "status_no_net": "Нет сети",
         "status_active": "Активен",
-        "update_label": "Обновление",
-        "update_actual": "Актуально",
-        "btn_start": "Старт",
-        "btn_disconnect": "Стоп",
-        "lang_label": "Язык / Language:",
-        "restart_title": "Требуется перезапуск",
-        "restart_msg": "Язык интерфейса изменен.\nПожалуйста, перезапустите программу для применения настроек.",
-        # NEW
-        "btn_cancel": "Отмена",
-        "status_cancelled": "Отменено",
+        "status_connected": "Подключен",
+        "status_off": "Отключен",
+        "update_label": "Доступно обновление!",
+        "update_actual": "Версия актуальна",
+
+        "log_system_start": "--- Готов к запуску ---",
         "log_op_cancelled": "Операция отменена пользователем.",
-        # LOGS
-        "log_system_start": "--- Запуск Системи ---",
-        "log_net_checking": "Проверка подключения к интернету через {host}...",
-        "log_net_available": "Интернет доступен.",
-        "log_net_unavailable": "Интернет недоступен, пробуем снова...",
-        "log_net_ping_err": "Ошибка пинга: {e}",
-        "log_time_drift_warn": "Внимание! Системное время отличается от реального на {drift:.2f} сек.",
-        "log_time_sync_rec": "Рекомендуется синхронизировать время на компьютере.",
-        "log_time_ntp_err": "Ошибка проверки времени через NTP: {e}",
-        "log_vpn_check_pre": "Проверка окна Pritunl...",
-        "log_vpn_window_found": "Окно Pritunl найдено, видимость: {visible}",
-        "log_vpn_restart": "Окно невидимо. Перезапускаем...",
-        "log_vpn_start": "Запуск Pritunl...",
-        "log_vpn_ready": "Pritunl готов.",
-        "log_vpn_connect_click": "Нажата кнопка Connect для профиля #{idx}",
-        "log_vpn_totp": "Введен код TOTP.",
-        "log_vpn_reconnect_click": "Нажата кнопка Connect (после 2FA).",
-        "log_vpn_disconnect_click": "Нажата кнопка Disconnect.",
-        "log_vpn_adapters_off": "Адаптеры отключены.",
-        "log_vpn_attempt": "Попытка подключения...",
-        "log_vpn_connected": "VPN Подключен!",
-        "log_vpn_error": "Ошибка VPN: {e}",
-        "log_vpn_visible_error": "Ошибка проверки видимости: {e}",
-        "log_vpn_search_error": "Ошибка поиска окна: {e}",
-        "log_vpn_kill_error": "Ошибка завершения процесса: {e}",
-        "log_vpn_check_error": "Ошибка проверки Pritunl: {e}",
-        "log_vpn_connect_click_error": "Ошибка нажатия Connect: {e}",
-        "log_mon_init": "VPN Monitor инициализирован для P#{idx}",
-        "log_mon_vpn_check_err": "Ошибка проверки VPN: {e}",
-        "log_mon_internet_check": "Проверяем интернет...",
-        "log_mon_reconnect_profile": "Переподключение VPN (P#{idx})...",
-        "log_mon_time_fix": "Исправьте системное время и нажмите Enter...",
-        "log_mon_totp_fail": "Не удалось получить TOTP код",
-        "log_mon_restore_start": "Восстановление соединения...",
-        "log_mon_click_fail": "Не удалось нажать Connect для P{idx}",
-        "log_mon_reconnect_err": "Ошибка переподключения: {e}",
-        "log_mon_loop_start": "Запуск цикла мониторинга...",
-        "log_mon_status": "VPN статус: {status}",
-        "log_mon_vpn_down": "VPN отключен! Попытка переподключения...",
-        "log_mon_reconnect_success": "Переподключение успешно",
-        "log_mon_loop_err": "Ошибка мониторинга: {e}",
-        "log_mon_no_secret": "Нет секрета 2FA (P{idx})",
-        "log_mon_bg_start": "Мониторинг запущен в фоне",
-        "log_mon_stop": "Остановка VPN Monitor...",
-        "status_connected": "ПОДКЛЮЧЕН",
-        "status_disconnected": "ОТКЛЮЧЕН",
-        "state_connected_lower": "подключен",
-        "state_disconnected_lower": "отключен",
-        "log_mon_initial_state": "Начальное состояние VPN: {state}",
-        "log_tm_launching": "Запускаем Telemart Client...",
-        "log_tm_launched": "Telemart Client запущен",
-        "log_tm_already_running": "Telemart уже запущен",
-        "log_tm_check_err": "Ошибка проверки Telemart: {e}",
-        "log_tm_wait_login": "Ждем поле логина...",
-        "log_tm_login_found": "Поле логина найдено",
-        "log_tm_login_not_found": "Поле логина не найдено... ({attempt}/180)",
-        "log_tm_window_not_found": "Окно не найдено... ({attempt}/180)",
-        "log_tm_search_err": "Ошибка поиска поля логина: {e}",
-        "log_tm_timeout": "Поле логина не появилось за 3 мин",
-        "log_tm_performing_login": "Выполняем вход...",
-        "log_tm_err_login_field": "Поле логина не найдено!",
-        "log_tm_login_entered": "Логин введен",
-        "log_tm_err_pass_field": "Поле пароля не найдено!",
-        "log_tm_pass_entered": "Пароль введен",
-        "log_tm_err_btn": "Кнопка Вход не найдена!",
-        "log_tm_btn_clicked": "Кнопка Вход нажата",
-        "log_tm_login_err": "Ошибка входа: {e}",
-        "log_tm_update_cycle": "Цикл обновления {current}/{max}",
-        "log_tm_login_ok": "Вход выполнен успешно",
-        "log_tm_update_fail": "Не удалось войти после обновлений",
-        "log_tm_start": "Запуск Telemart...",
-        "log_tm_login": "Вход в аккаунт...",
-        "log_tm_success": "Вход выполнен!",
-        "log_monitor_start": "Запуск монитора...",
+
+        "error_no_profiles": "Профили не найдены. Нажмите 'Connect' в главном меню!",
+
+        # --- TELEMART LOGS ---
+        "log_tm_launching": "Запуск Telemart...",
+        "log_tm_launched": "Telemart запущен.",
+        "log_tm_update_cycle": "Цикл обновления Telemart...",
+        "log_tm_wait_login": "Ожидание окна входа...",
+        "log_tm_window_not_found": "Окно входа не найдено...",
+        "log_tm_login_found": "Окно входа найдено!",
+        "log_tm_performing_login": "Выполняется вход...",
+        "log_tm_login_entered": "Логин введен.",
+        "log_tm_pass_entered": "Пароль введен.",
+        "log_tm_btn_clicked": "Кнопка нажата.",
+        "log_tm_login_ok": "Успешный вход в Telemart.",
+
+        "vpn_instruction": (
+            "⚠️ Инструкция по настройке VPN:\n\n"
+            "1. Завершите эту настройку и нажмите 'Сохранить'.\n"
+            "2. В главном окне нажмите кнопку 'Connect'.\n"
+            "3. Программа просканирует Pritunl и найдет профили.\n"
+            "4. После этого зайдите в Настройки (⚙️) и\n"
+            "   введите секреты 2FA для найденных профилей."
+        )
     },
+
     "en": {
-        # ... (Старые ключи) ...
         "window_title_setup": "Initial Setup",
-        "window_title_pin": "Enter PIN",
         "window_title_settings": "Settings",
-        "pin_label": "PIN Code:",
+        "window_title_pin": "Login",
+
+        "lang_label": "Language",
+        "group_security": "Security",
+        "group_vpn": "VPN Settings (Pritunl)",
+        "group_tm": "Telemart Settings",
+        "group_access": "Access",
+        "group_time": "Time Synchronization",
+
+        "pin_label": "Create PIN:",
         "pin_repeat": "Repeat PIN:",
-        "pin_enter_msg": "Enter your PIN code:",
-        "secret_1": "2FA Secret (Profile 1):",
-        "secret_2": "2FA Secret (Profile 2):",
-        "secret_3": "2FA Secret (Profile 3):",
-        "secret_hint": "Fill in order of Pritunl profiles",
+        "pin_enter_msg": "Enter PIN",
+        "unlock_btn": "Unlock",
+
         "auto_start_tm": "Auto-start Telemart",
-        "tm_path_label": "Path to Telemart.exe:",
-        "btn_browse": "Browse...",
+        "tm_path_label": "Telemart Path (.exe):",
         "login": "Login:",
         "password": "Password:",
-        "save_btn": "Save & Continue",
+
+        "save_btn": "Save and Launch",
         "save_changes_btn": "Save Changes",
-        "net_status_label": "Internet",
-        "net_ping_label": "Ping:",
-        "unlock_btn": "Unlock",
         "delete_btn": "Reset Data",
-        "delete_confirm": "Are you sure? This deletes all data.",
-        "error_pin_mismatch": "PINs do not match.",
-        "error_no_secret": "Provide at least one 2FA secret.",
-        "error_wrong_pin": "Wrong PIN.",
-        "error_no_tm_path": "Telemart Client path is not specified!",
-        "group_security": "SECURITY",
-        "group_vpn": "VPN PROFILES (2FA)",
-        "group_tm": "TELEMART AUTOMATION",
-        "group_access": "SETTINGS ACCESS",
-        "status_waiting": "Waiting",
-        "status_off": "Disconnected",
+
+        "offset_label": "Manual Offset (sec):",
+        "offset_hint": "(+/- seconds correction)",
+        "label_pin_short": "PIN:",
+
+        "error_pin_mismatch": "PIN codes do not match!",
+        "error_wrong_pin": "Invalid PIN!",
+        "error_no_tm_path": "Telemart path is missing!",
+        "delete_confirm": "Are you sure? This will delete all data and close the app.",
+
+        "restart_title": "Language Changed",
+        "restart_msg": "Please restart the app to apply changes fully.",
+
+        "btn_start": "Start",
+        "btn_cancel": "Cancel",
+        "btn_disconnect": "Disconnect",
+        "net_status_label": "Internet:",
+        "net_ping_label": "Ping:",
+
+        "status_waiting": "Waiting...",
         "status_working": "Working...",
         "status_success": "Success",
         "status_error": "Error",
-        "status_no_net": "No Net",
         "status_active": "Active",
-        "update_label": "Update",
+        "status_connected": "Connected",
+        "status_off": "Disconnected",
+        "update_label": "Update Available!",
         "update_actual": "Up to date",
-        "btn_start": "Start",
-        "btn_disconnect": "Stop",
-        "lang_label": "Language:",
-        "restart_title": "Restart Required",
-        "restart_msg": "Language changed.\nPlease restart the application to apply settings.",
-        # NEW
-        "btn_cancel": "Cancel",
-        "status_cancelled": "Cancelled",
+
+        "log_system_start": "--- Ready to start ---",
         "log_op_cancelled": "Operation cancelled by user.",
-        # LOGS (копируем старые значения, чтобы не сломать)
-        "log_system_start": "--- System Start ---",
-        "log_net_checking": "Checking internet via {host}...",
-        "log_net_available": "Internet available.",
-        "log_net_unavailable": "Internet unavailable, retrying...",
-        "log_net_ping_err": "Ping error: {e}",
-        "log_time_drift_warn": "Warning! System time drift: {drift:.2f} sec.",
-        "log_time_sync_rec": "Please synchronize system time.",
-        "log_time_ntp_err": "NTP check error: {e}",
-        "log_vpn_check_pre": "Checking Pritunl window...",
-        "log_vpn_window_found": "Pritunl found, visible: {visible}",
-        "log_vpn_restart": "Window hidden. Restarting...",
-        "log_vpn_start": "Starting Pritunl...",
-        "log_vpn_ready": "Pritunl ready.",
-        "log_vpn_connect_click": "Clicked Connect for profile #{idx}",
-        "log_vpn_totp": "TOTP entered.",
-        "log_vpn_reconnect_click": "Clicked Connect (after 2FA).",
-        "log_vpn_disconnect_click": "Clicked Disconnect.",
-        "log_vpn_adapters_off": "Adapters disconnected.",
-        "log_vpn_attempt": "Connecting VPN...",
-        "log_vpn_connected": "VPN Connected!",
-        "log_vpn_error": "VPN Error: {e}",
-        "log_vpn_visible_error": "Visibility check error: {e}",
-        "log_vpn_search_error": "Search error: {e}",
-        "log_vpn_kill_error": "Kill process error: {e}",
-        "log_vpn_check_error": "Pritunl check error: {e}",
-        "log_vpn_connect_click_error": "Connect click error: {e}",
-        "log_mon_init": "VPN Monitor init for P#{idx}",
-        "log_mon_vpn_check_err": "VPN check error: {e}",
-        "log_mon_internet_check": "Checking internet...",
-        "log_mon_reconnect_profile": "Reconnecting VPN (P#{idx})...",
-        "log_mon_time_fix": "Fix system time and press Enter...",
-        "log_mon_totp_fail": "Failed to get TOTP",
-        "log_mon_restore_start": "Restoring connection...",
-        "log_mon_click_fail": "Failed to click Connect for P{idx}",
-        "log_mon_reconnect_err": "Reconnect error: {e}",
-        "log_mon_loop_start": "Starting monitor loop...",
-        "log_mon_status": "VPN Status: {status}",
-        "log_mon_vpn_down": "VPN Down! Reconnecting...",
-        "log_mon_reconnect_success": "Reconnect successful",
-        "log_mon_loop_err": "Monitor error: {e}",
-        "log_mon_no_secret": "No 2FA secret (P{idx})",
-        "log_mon_bg_start": "Monitor running in background",
-        "log_mon_stop": "Stopping VPN Monitor...",
-        "status_connected": "CONNECTED",
-        "status_disconnected": "DISCONNECTED",
-        "state_connected_lower": "connected",
-        "state_disconnected_lower": "disconnected",
-        "log_mon_initial_state": "Initial VPN state: {state}",
-        "log_tm_launching": "Launching Telemart Client...",
-        "log_tm_launched": "Telemart Client launched",
-        "log_tm_already_running": "Telemart already running",
-        "log_tm_check_err": "Telemart check error: {e}",
-        "log_tm_wait_login": "Waiting for login box...",
-        "log_tm_login_found": "Login box found",
-        "log_tm_login_not_found": "Login box not found... ({attempt}/180)",
-        "log_tm_window_not_found": "Window not found... ({attempt}/180)",
-        "log_tm_search_err": "Search error: {e}",
-        "log_tm_timeout": "Login box timeout (3 min)",
+
+        "error_no_profiles": "Profiles not found. Click 'Connect' in main menu first!",
+
+        # --- TELEMART LOGS ---
+        "log_tm_launching": "Launching Telemart...",
+        "log_tm_launched": "Telemart launched.",
+        "log_tm_update_cycle": "Telemart update cycle...",
+        "log_tm_wait_login": "Waiting for login window...",
+        "log_tm_window_not_found": "Login window not found...",
+        "log_tm_login_found": "Login window found!",
         "log_tm_performing_login": "Performing login...",
-        "log_tm_err_login_field": "Login field not found!",
-        "log_tm_login_entered": "Login entered",
-        "log_tm_err_pass_field": "Password field not found!",
-        "log_tm_pass_entered": "Password entered",
-        "log_tm_err_btn": "Enter button not found!",
-        "log_tm_btn_clicked": "Enter clicked",
-        "log_tm_login_err": "Login error: {e}",
-        "log_tm_update_cycle": "Update cycle {current}/{max}",
-        "log_tm_login_ok": "Login successful",
-        "log_tm_update_fail": "Login failed after updates",
-        "log_tm_start": "Starting Telemart...",
-        "log_tm_login": "Logging in...",
-        "log_tm_success": "Login Successful!",
-        "log_monitor_start": "Starting Monitor...",
+        "log_tm_login_entered": "Login entered.",
+        "log_tm_pass_entered": "Password entered.",
+        "log_tm_btn_clicked": "Button clicked.",
+        "log_tm_login_ok": "Telemart login successful.",
+
+        "vpn_instruction": (
+            "⚠️ VPN Setup Instructions:\n\n"
+            "1. Finish this setup and click 'Save'.\n"
+            "2. Click the 'Connect' button in the main window.\n"
+            "3. The app will scan Pritunl and discover profiles.\n"
+            "4. Go back to Settings (⚙️) and enter\n"
+            "   2FA secrets for the discovered profiles."
+        )
     },
+
     "ua": {
-        # ... (Старые ключи) ...
         "window_title_setup": "Початкове налаштування",
-        "window_title_pin": "Введення PIN",
         "window_title_settings": "Налаштування",
-        "pin_label": "PIN-код:",
-        "pin_repeat": "Повторіть PIN:",
-        "pin_enter_msg": "Введіть ваш PIN-код:",
-        "secret_1": "Секрет 2FA (Профіль 1):",
-        "secret_2": "Секрет 2FA (Профіль 2):",
-        "secret_3": "Секрет 2FA (Профіль 3):",
-        "secret_hint": "Заповнюйте по порядку профілів у Pritunl",
-        "auto_start_tm": "Автозапуск Telemart",
-        "tm_path_label": "Шлях до Telemart.exe:",
-        "btn_browse": "Обрати...",
+        "window_title_pin": "Вхід",
+
+        "lang_label": "Мова / Language",
+        "group_security": "Безпека",
+        "group_vpn": "Налаштування VPN (Pritunl)",
+        "group_tm": "Налаштування Telemart",
+        "group_access": "Доступ",
+        "group_time": "Синхронізація часу",
+
+        "pin_label": "Створіть PIN-код:",
+        "pin_repeat": "Повторіть PIN-код:",
+        "pin_enter_msg": "Введіть PIN-код",
+        "unlock_btn": "Розблокувати",
+
+        "auto_start_tm": "Авто-запуск Telemart",
+        "tm_path_label": "Шлях до Telemart (.exe):",
         "login": "Логін:",
         "password": "Пароль:",
-        "save_btn": "Зберегти та продовжити",
+
+        "save_btn": "Зберегти та Запустити",
         "save_changes_btn": "Зберегти зміни",
-        "unlock_btn": "Розблокувати",
         "delete_btn": "Скидання даних",
-        "net_status_label": "Інтернет",
+
+        "offset_label": "Ручне зміщення (сек):",
+        "offset_hint": "(корекція +/- секунд)",
+        "label_pin_short": "PIN:",
+
+        "error_pin_mismatch": "PIN-коди не співпадають!",
+        "error_wrong_pin": "Невірний PIN-код!",
+        "error_no_tm_path": "Шлях до Telemart не вказано!",
+        "delete_confirm": "Ви впевнені? Це видалить усі дані та закриє програму.",
+
+        "restart_title": "Мову змінено",
+        "restart_msg": "Будь ласка, перезапустіть програму для повного застосування мови.",
+
+        "btn_start": "Start",
+        "btn_cancel": "Cancel",
+        "btn_disconnect": "Disconnect",
+        "net_status_label": "Інтернет:",
         "net_ping_label": "Ping:",
-        "delete_confirm": "Ви впевнені? Це видалить усі дані.",
-        "error_pin_mismatch": "PIN коди не співпадають.",
-        "error_no_secret": "Вкажіть хоча б один секрет 2FA.",
-        "error_wrong_pin": "Невірний PIN.",
-        "error_no_tm_path": "Не вказано шлях до файлу Telemart Client!",
-        "group_security": "БЕЗПЕКА",
-        "group_vpn": "VPN ПРОФІЛІ (2FA)",
-        "group_tm": "TELEMART АВТОМАТИЗАЦІЯ",
-        "group_access": "ДОСТУП ДО НАЛАШТУВАНЬ",
-        "status_waiting": "Очікування",
-        "status_off": "Вимкнено",
+
+        "status_waiting": "Очікування...",
         "status_working": "Робота...",
         "status_success": "Успішно",
         "status_error": "Помилка",
-        "status_no_net": "Немає мережі",
         "status_active": "Активний",
-        "update_label": "Оновлення",
-        "update_actual": "Актуально",
-        "btn_start": "Старт",
-        "btn_disconnect": "Стоп",
-        "log_system_start": "--- Запуск Системи ---",
-        "log_net_checking": "Перевірка інтернету через {host}...",
-        "log_net_available": "Інтернет є.",
-        "log_net_unavailable": "Інтернет недоступний, ще раз...",
-        "log_net_ping_err": "Помилка пінгу: {e}",
-        "log_time_drift_warn": "Увага! Відхилення часу: {drift:.2f} сек.",
-        "log_time_sync_rec": "Рекомендується синхронізація часу.",
-        "log_time_ntp_err": "Помилка NTP: {e}",
-        "log_vpn_check_pre": "Перевірка вікна Pritunl...",
-        "log_vpn_window_found": "Вікно Pritunl знайдено, видимість: {visible}",
-        "log_vpn_restart": "Вікно невидиме. Перезапуск...",
-        "log_vpn_start": "Запуск Pritunl...",
-        "log_vpn_ready": "Pritunl готовий.",
-        "log_vpn_connect_click": "Натиснуто Connect для профілю #{idx}",
-        "log_vpn_totp": "Введено код TOTP.",
-        "log_vpn_reconnect_click": "Натиснуто Connect (після 2FA).",
-        "log_vpn_disconnect_click": "Натиснуто Disconnect.",
-        "log_vpn_adapters_off": "Адаптери вимкнено.",
-        "log_vpn_attempt": "Спроба підключення...",
-        "log_vpn_connected": "VPN Підключено!",
-        "log_vpn_error": "Помилка VPN: {e}",
-        "log_vpn_visible_error": "Помилка видимості: {e}",
-        "log_vpn_search_error": "Помилка пошуку вікна: {e}",
-        "log_vpn_kill_error": "Помилка зупинки процесу: {e}",
-        "log_vpn_check_error": "Помилка перевірки Pritunl: {e}",
-        "log_vpn_connect_click_error": "Помилка кліку Connect: {e}",
-        "log_mon_init": "VPN Monitor ініціалізовано для P#{idx}",
-        "log_mon_vpn_check_err": "Помилка перевірки VPN: {e}",
-        "log_mon_internet_check": "Перевірка інтернету...",
-        "log_mon_reconnect_profile": "Перепідключення VPN (P#{idx})...",
-        "log_mon_time_fix": "Виправте системний час і натисніть Enter...",
-        "log_mon_totp_fail": "Не вдалося отримати TOTP",
-        "log_mon_restore_start": "Відновлення з'єднання...",
-        "log_mon_click_fail": "Не вдалося натиснути Connect для P{idx}",
-        "log_mon_reconnect_err": "Помилка перепідключення: {e}",
-        "log_mon_loop_start": "Запуск циклу моніторингу...",
-        "log_mon_status": "Статус VPN: {status}",
-        "log_mon_vpn_down": "VPN Вимкнено! Перепідключення...",
-        "log_mon_reconnect_success": "Успішно перепідключено",
-        "log_mon_loop_err": "Помилка монітора: {e}",
-        "log_mon_no_secret": "Немає секрету 2FA (P{idx})",
-        "log_mon_bg_start": "Монітор працює у фоні",
-        "log_mon_stop": "Зупинка VPN Monitor...",
-        "status_connected": "ПІДКЛЮЧЕНО",
-        "status_disconnected": "ВІДКЛЮЧЕНО",
-        "state_connected_lower": "підключено",
-        "state_disconnected_lower": "відключено",
-        "log_mon_initial_state": "Початковий стан VPN: {state}",
-        "log_tm_launching": "Запускаємо Telemart Client...",
-        "log_tm_launched": "Telemart Client запущено",
-        "log_tm_already_running": "Telemart вже працює",
-        "log_tm_check_err": "Помилка перевірки Telemart: {e}",
-        "log_tm_wait_login": "Чекаємо поле логіна...",
-        "log_tm_login_found": "Поле логіна знайдено",
-        "log_tm_login_not_found": "Поле логіна не знайдено... ({attempt}/180)",
-        "log_tm_window_not_found": "Вікно не знайдено... ({attempt}/180)",
-        "log_tm_search_err": "Помилка пошуку: {e}",
-        "log_tm_timeout": "Таймаут поля логіна (3 хв)",
-        "log_tm_performing_login": "Виконуємо вхід...",
-        "log_tm_err_login_field": "Поле логіна не знайдено!",
-        "log_tm_login_entered": "Логін введено",
-        "log_tm_err_pass_field": "Поле пароля не знайдено!",
-        "log_tm_pass_entered": "Пароль введено",
-        "log_tm_err_btn": "Кнопка Вхід не знайдена!",
-        "log_tm_btn_clicked": "Натиснуто Вхід",
-        "log_tm_login_err": "Помилка входу: {e}",
-        "log_tm_update_cycle": "Цикл оновлення {current}/{max}",
-        "log_tm_login_ok": "Вхід успішний",
-        "log_tm_update_fail": "Вхід не вдався після оновлень",
-        "log_tm_start": "Запуск Telemart...",
-        "log_tm_login": "Вхід в акаунт...",
-        "log_tm_success": "Вхід виконано!",
-        "log_monitor_start": "Запуск монітора...",
-        # NEW
-        "btn_cancel": "Скасувати",
-        "status_cancelled": "Скасовано",
+        "status_connected": "Підключено",
+        "status_off": "Вимкнено",
+        "update_label": "Є оновлення!",
+        "update_actual": "Версія актуальна",
+
+        "log_system_start": "--- Готовий до запуску ---",
         "log_op_cancelled": "Операцію скасовано користувачем.",
+
+        "error_no_profiles": "Профілі не знайдено. Натисніть 'Connect' у головному меню!",
+
+        # --- TELEMART LOGS ---
+        "log_tm_launching": "Запуск Telemart...",
+        "log_tm_launched": "Telemart запущено.",
+        "log_tm_update_cycle": "Цикл оновлення Telemart...",
+        "log_tm_wait_login": "Очікування вікна входу...",
+        "log_tm_window_not_found": "Вікно входу не знайдено...",
+        "log_tm_login_found": "Вікно входу знайдено!",
+        "log_tm_performing_login": "Виконується вхід...",
+        "log_tm_login_entered": "Логін введено.",
+        "log_tm_pass_entered": "Пароль введено.",
+        "log_tm_btn_clicked": "Кнопку натиснуто.",
+        "log_tm_login_ok": "Успішний вхід у Telemart.",
+
+        "vpn_instruction": (
+            "⚠️ Інструкція з налаштування VPN:\n\n"
+            "1. Завершіть це налаштування та натисніть 'Зберегти'.\n"
+            "2. У головному вікні натисніть кнопку 'Connect'.\n"
+            "3. Програма просканує Pritunl та знайде профілі.\n"
+            "4. Поверніться до Налаштувань (⚙️) та\n"
+            "   введіть секрети 2FA для знайдених профілів."
+        )
     }
 }
+
+
+def get_system_lang():
+    try:
+        sys_lang = locale.getdefaultlocale()[0]
+        if sys_lang:
+            if "ru" in sys_lang.lower(): return "ru"
+            if "uk" in sys_lang.lower() or "ua" in sys_lang.lower(): return "ua"
+    except:
+        pass
+    return "en"
 
 
 def set_language(lang_code):
     global CURRENT_LANG
-    CURRENT_LANG = lang_code
+    if lang_code in TRANSLATIONS:
+        CURRENT_LANG = lang_code
+    else:
+        CURRENT_LANG = "en"
 
 
 def get_language():
@@ -421,8 +285,15 @@ def get_language():
 
 
 def tr(key, **kwargs):
-    text = TRANSLATIONS.get(CURRENT_LANG, TRANSLATIONS["ru"]).get(key, key)
-    try:
-        return text.format(**kwargs)
-    except Exception:
-        return text
+    # Отримуємо переклад
+    text = TRANSLATIONS.get(CURRENT_LANG, {}).get(key, key)
+
+    # Якщо передані аргументи (наприклад, current=1), підставляємо їх
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except:
+            # Якщо підставити не вийшло (або в рядку немає placeholder-ів), повертаємо текст як є
+            return text
+
+    return text
