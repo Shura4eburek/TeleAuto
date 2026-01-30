@@ -394,3 +394,7 @@ credentials.json
 /TeleAuto.spec
 /launcher.py
 /TeleAuto.sln
+/src/teleauto.rar
+/src/teleauto/profiles.json
+/dist/profiles.json
+/src/teleauto/config.json
