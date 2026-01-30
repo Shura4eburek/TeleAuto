@@ -390,3 +390,6 @@ credentials.json
 /build/TeleAuto/xref-TeleAuto.html
 /src/teleauto/TeleAuto_new.exe
 !/src/teleauto/temp/
+!/src/teleauto/vpn/vpn.py
+!/src/teleauto/vpn/vpn_monitor_simple.py
+!/src/teleauto/credentials.json
