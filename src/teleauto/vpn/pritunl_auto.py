@@ -184,6 +184,7 @@ class PritunlAutopilot:
             print(f"[!] ОШИБКА: Секрет для '{profile_name}' не найден!")
             print("[!] Откройте Настройки (⚙️) и нажмите 'Сохранить', чтобы обновить секреты.")
             self.notify_ui("working", "Нет секрета!")
+            self.stop_event.set()
             return
 
         otp = self.get_totp(profile_name)
