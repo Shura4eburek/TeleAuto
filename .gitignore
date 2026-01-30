@@ -387,8 +387,10 @@ credentials.json
 /build/TeleAuto/warn-TeleAuto.txt
 /build/TeleAuto/xref-TeleAuto.html
 /src/teleauto/TeleAuto_new.exe
-!/src/teleauto/temp/
-!/src/teleauto/vpn/vpn.py
-!/src/teleauto/vpn/vpn_monitor_simple.py
-!/src/teleauto/credentials.json
-!/TeleAuto.spec
+/src/teleauto/temp/
+/src/teleauto/vpn/vpn.py
+/src/teleauto/vpn/vpn_monitor_simple.py
+/src/teleauto/credentials.json
+/TeleAuto.spec
+/launcher.py
+/TeleAuto.sln
