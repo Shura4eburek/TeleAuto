@@ -64,7 +64,7 @@ TRANSLATIONS = {
         "status_active": "Активен",
         "status_connected": "Подключен",
         "status_off": "Отключен",
-        "update_label": "Доступно обновление!",
+        "update_label": "Обновление",
         "update_actual": "Версия актуальна",
 
         "log_system_start": "--- Готов к запуску ---",
@@ -146,7 +146,7 @@ TRANSLATIONS = {
         "status_active": "Active",
         "status_connected": "Connected",
         "status_off": "Disconnected",
-        "update_label": "Update Available!",
+        "update_label": "Update",
         "update_actual": "Up to date",
 
         "log_system_start": "--- Ready to start ---",
@@ -228,7 +228,7 @@ TRANSLATIONS = {
         "status_active": "Активний",
         "status_connected": "Підключено",
         "status_off": "Вимкнено",
-        "update_label": "Є оновлення!",
+        "update_label": "Оновлення",
         "update_actual": "Версія актуальна",
 
         "log_system_start": "--- Готовий до запуску ---",
