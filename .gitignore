@@ -374,7 +374,6 @@ credentials.json
 !/dist/
 !/build/
 !/icon.ico
-!/Unbounded-VariableFont_wght.ttf
 !/TeleAuto.sln
 /build/TeleAuto/Analysis-00.toc
 /build/TeleAuto/base_library.zip
@@ -385,7 +384,6 @@ credentials.json
 /build/TeleAuto/PYZ-00.toc
 /dist/TeleAuto.exe
 /build/TeleAuto/TeleAuto.pkg
-/Unbounded-VariableFont_wght.ttf
 /build/TeleAuto/warn-TeleAuto.txt
 /build/TeleAuto/xref-TeleAuto.html
 /src/teleauto/TeleAuto_new.exe
@@ -393,3 +391,4 @@ credentials.json
 !/src/teleauto/vpn/vpn.py
 !/src/teleauto/vpn/vpn_monitor_simple.py
 !/src/teleauto/credentials.json
+!/TeleAuto.spec
