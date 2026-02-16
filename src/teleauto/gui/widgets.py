@@ -1,9 +1,8 @@
 # src/teleauto/gui/widgets.py
-import sys
 import customtkinter as ctk
 from PIL import Image, ImageDraw
 from src.teleauto.localization import tr
-from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY
+from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY, LED_BLINK_INTERVAL
 
 
 # --- LED Circle ---
@@ -45,7 +44,7 @@ class LEDCircle(ctk.CTkLabel):
         key = "working" if self._blink_state else "working_dim"
         self.configure(image=self._images[key])
         self._blink_state = not self._blink_state
-        self._blink_job = self.after(600, self._blink_loop)
+        self._blink_job = self.after(LED_BLINK_INTERVAL, self._blink_loop)
 
     def set_state(self, state):
         self.stop_blinking();
@@ -116,37 +115,3 @@ class SettingsGroup(ctk.CTkFrame):
         self.label.configure(text=tr(self.title_key))
 
 
-# --- Logger ---
-class TextboxLogger:
-    def __init__(self, textbox):
-        self.textbox = textbox
-        self.stdout = sys.stdout
-
-    def write(self, message):
-        # Если есть реальная консоль (sys.stdout не None) — пишем туда
-        if self.stdout:
-            try:
-                self.stdout.write(message)
-            except Exception:
-                pass
-
-        # В любом случае пишем в GUI
-        self.textbox.after(0, self.write_to_gui, message)
-
-    def flush(self):
-        if self.stdout:
-            try:
-                self.stdout.flush()
-            except Exception:
-                pass
-
-    def write_to_gui(self, message):
-        try:
-            if self.textbox.winfo_exists():
-                self.textbox.insert(ctk.END, message)
-                self.textbox.see(ctk.END)
-        except:
-            pass
-
-    def flush(self):
-        self.stdout.flush()

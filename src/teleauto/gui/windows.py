@@ -14,6 +14,22 @@ from .widgets import SettingsGroup
 
 PROFILES_FILE = "profiles.json"
 
+# Virtual keycodes for clipboard shortcuts (work regardless of keyboard layout)
+_VK_MAP = {86: "<<Paste>>", 67: "<<Copy>>", 65: "<<SelectAll>>", 88: "<<Cut>>"}
+
+
+def _bind_clipboard_hotkeys(window):
+    """Fix Ctrl+C/V/A/X not working on non-Latin keyboard layouts."""
+    def _on_key(event):
+        if event.state & 0x4 and event.keycode in _VK_MAP:
+            widget = event.widget
+            try:
+                widget.event_generate(_VK_MAP[event.keycode])
+            except Exception:
+                pass
+            return "break"
+    window.bind_all("<KeyPress>", _on_key, add=True)
+
 
 class ConfigWindow(ctk.CTkToplevel):
     def __init__(self, master_app):
@@ -24,6 +40,7 @@ class ConfigWindow(ctk.CTkToplevel):
         self.transient(master_app)
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
+        _bind_clipboard_hotkeys(self)
 
         self.main_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -144,6 +161,7 @@ class PinWindow(ctk.CTkToplevel):
         self.transient(master_app)
         self.grab_set()
         self.after(10, lambda: apply_window_settings(self))
+        _bind_clipboard_hotkeys(self)
         f_msg = (MAIN_FONT_FAMILY, 13)
         f_entry = (MAIN_FONT_FAMILY, 14, "bold")
         f_btn = (MAIN_FONT_FAMILY, 13, "bold")
@@ -163,7 +181,7 @@ class PinWindow(ctk.CTkToplevel):
 
     def check(self, event=None):
         entered_pin = self.pin_entry.get()
-        if verify_pin(self.master_app.creds.get("pin_hash"), entered_pin):
+        if verify_pin(self.master_app.ctrl.creds.get("pin_hash"), entered_pin):
             self.destroy()
             self.master_app.pin_unlocked(entered_pin)
         else:
@@ -181,6 +199,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.initial_lang = get_language()
         self.selected_lang = get_language()
         self.after(10, lambda: apply_window_settings(self))
+        _bind_clipboard_hotkeys(self)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -311,8 +330,8 @@ class SettingsWindow(ctk.CTkToplevel):
         self.is_window_open = True
         self.update_totp_preview()
 
-        if self.master_app.creds.get("start_telemart"): self.cb.select()
-        if not self.master_app.creds.get("pin_hash"): self.pin_frame.grid_forget(); self.unlock(True)
+        if self.master_app.ctrl.creds.get("start_telemart"): self.cb.select()
+        if not self.master_app.ctrl.creds.get("pin_hash"): self.pin_frame.grid_forget(); self.unlock(True)
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -388,7 +407,7 @@ class SettingsWindow(ctk.CTkToplevel):
     def unlock(self, no_pin=False):
         try:
             pin_val = None if no_pin else self.pin_ent.get().strip()
-            d = decrypt_credentials(self.master_app.creds, pin_val)
+            d = decrypt_credentials(self.master_app.ctrl.creds, pin_val)
 
             self.lv.set(d[0])
             self.pv.set(d[1])
@@ -416,7 +435,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def save(self):
         try:
-            pin = self.pin_ent.get().strip() if self.master_app.creds.get("pin_hash") else None
+            pin = self.pin_ent.get().strip() if self.master_app.ctrl.creds.get("pin_hash") else None
 
             secrets_to_save = {}
             for p_name, sv in self.sv_dict.items():
@@ -434,8 +453,8 @@ class SettingsWindow(ctk.CTkToplevel):
                              telemart_path=self.tm_path_var.get(),
                              manual_offset=offset_to_save)
 
-            self.master_app.creds = load_credentials()
-            self.master_app.user_pin = pin
+            self.master_app.ctrl.creds = load_credentials()
+            self.master_app.ctrl.user_pin = pin
             self.master_app.update_main_window_buttons()
             if self.selected_lang != self.initial_lang: messagebox.showinfo(tr("restart_title"), tr("restart_msg"))
             self.on_close()

@@ -1,10 +1,12 @@
 # src/teleauto/gui/main_view.py
 import sys
+import logging
 import webbrowser
 import customtkinter as ctk
 from src.teleauto.localization import tr
+from src.teleauto.logger import TextboxHandler, StdoutToLogger
 from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY, VERSION
-from .widgets import LEDCircle, TitleBox, StatusBox, TextboxLogger
+from .widgets import LEDCircle, TitleBox, StatusBox
 
 
 class MainWindow(ctk.CTkFrame):
@@ -143,14 +145,20 @@ class MainWindow(ctk.CTkFrame):
 
     def expand_log(self):
         if self.is_expanded: return
-        self.is_expanded = True;
-        current_w = self.master_app.winfo_width();
+        self.is_expanded = True
+        current_w = self.master_app.winfo_width()
         self.master_app.geometry(f"{current_w}x600")
-        self.log_textbox.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew");
+        self.log_textbox.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
         self.grid_rowconfigure(2, weight=1)
-        logger = TextboxLogger(self.log_textbox);
-        sys.stdout = logger;
-        sys.stderr = logger
+
+        # Attach TextboxHandler to root logger
+        handler = TextboxHandler(self.log_textbox)
+        logging.getLogger().addHandler(handler)
+
+        # Redirect print() to logging for compatibility
+        log = logging.getLogger("stdout")
+        sys.stdout = StdoutToLogger(log, logging.INFO)
+        sys.stderr = StdoutToLogger(log, logging.ERROR)
 
     def update_panel_safe(self, panel_name, state, text_key):
         title_box, status_box = None, None

@@ -391,10 +391,11 @@ credentials.json
 /src/teleauto/vpn/vpn.py
 /src/teleauto/vpn/vpn_monitor_simple.py
 /src/teleauto/credentials.json
-/TeleAuto.spec
-/launcher.py
 /TeleAuto.sln
 /src/teleauto.rar
 /src/teleauto/profiles.json
 /dist/profiles.json
 /src/teleauto/config.json
+.venv/
+teleauto.log
+teleauto.log.*

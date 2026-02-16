@@ -92,7 +92,59 @@ TRANSLATIONS = {
             "3. Программа просканирует Pritunl и найдет профили.\n"
             "4. После этого зайдите в Настройки (⚙️) и\n"
             "   введите секреты 2FA для найденных профилей."
-        )
+        ),
+
+        # --- VPN LOGS ---
+        "log_vpn_syncing": "Синхронизация времени...",
+        "log_vpn_ntp_ok": "NTP OK. Авто-дрифт: {drift:.2f} сек.",
+        "log_vpn_http_ok": "HTTP OK. Авто-дрифт: {drift:.2f} сек.",
+        "log_vpn_sync_err": "Ошибка синхронизации: {e}",
+        "log_vpn_offset": "Итоговое смещение: {total:.2f} сек. (авто: {drift:.2f} + ручное: {manual})",
+        "log_vpn_no_cli": "Pritunl CLI не найден: {path}",
+        "log_vpn_internet_restored": "Интернет восстановлен!",
+        "log_vpn_no_internet": "Интернет отсутствует...",
+        "log_vpn_importing": "Импорт нового файла: {name}",
+        "log_vpn_import_err": "Ошибка импорта {name}: {e}",
+        "log_vpn_no_secret": "Секрет для '{name}' не найден! Откройте Настройки и нажмите 'Сохранить'.",
+        "log_vpn_totp_err": "Ошибка генерации TOTP для {name}",
+        "log_vpn_connecting": "Подключение к {name}...",
+        "log_vpn_disconnecting_all": "Завершение: отключение всех профилей...",
+        "log_vpn_disconnecting": "Отключение: {name}",
+        "log_vpn_started": "Pritunl Auto-Monitor запущен.",
+        "log_vpn_empty_profiles": "Список профилей пуст. Импорт из папки...",
+        "log_vpn_initiating": "Инициирую подключение: {name}",
+        "log_vpn_status": "Статус VPN: {msg}",
+        "log_vpn_monitor_stopped": "Мониторинг остановлен.",
+        "log_vpn_profiles_err": "Ошибка get_profiles: {e}",
+        "log_vpn_profiles_save_err": "Не удалось сохранить список профилей: {e}",
+        "log_vpn_backoff": "Задержка переподключения: {delay} сек.",
+        "log_vpn_active": "Активны: {active} из {total}",
+
+        # --- NETWORK LOGS ---
+        "log_net_checking": "Проверка интернета: {host}",
+        "log_net_available": "Интернет доступен.",
+        "log_net_unavailable": "Интернет недоступен.",
+        "log_net_ping_err": "Ошибка пинга: {e}",
+
+        # --- CONTROLLER LOGS ---
+        "log_ctrl_stopping": "Остановка системы мониторинга...",
+        "log_ctrl_autopilot_err": "Ошибка автопилота: {e}",
+        "log_ctrl_telemart_err": "Ошибка Telemart: {e}",
+        "log_ctrl_bg_err": "Ошибка фоновой задачи: {e}",
+        "log_ctrl_forced_shutdown": "Принудительное завершение после таймаута",
+
+        # --- UPDATER LOGS ---
+        "log_upd_found": "Найдено обновление: {tag}. Загрузка...",
+        "log_upd_err": "Ошибка обновления: {e}",
+        "log_upd_verified": "Обновление загружено и проверено: {tag}",
+        "log_upd_size_err": "Несоответствие размера: ожидалось {expected}, получено {actual}",
+        "log_upd_not_pe": "Загруженный файл не является исполняемым PE",
+        "log_upd_sha_fail": "SHA-256 не совпадает: ожидалось {expected}, получено {actual}",
+        "log_upd_sha_ok": "SHA-256 проверен OK",
+        "log_upd_verify_fail": "Проверка загрузки не пройдена, файл удален",
+
+        "tray_show": "Показать",
+        "tray_quit": "Выход",
     },
 
     "en": {
@@ -174,7 +226,59 @@ TRANSLATIONS = {
             "3. The app will scan Pritunl and discover profiles.\n"
             "4. Go back to Settings (⚙️) and enter\n"
             "   2FA secrets for the discovered profiles."
-        )
+        ),
+
+        # --- VPN LOGS ---
+        "log_vpn_syncing": "Syncing time...",
+        "log_vpn_ntp_ok": "NTP OK. Auto-drift: {drift:.2f} sec.",
+        "log_vpn_http_ok": "HTTP OK. Auto-drift: {drift:.2f} sec.",
+        "log_vpn_sync_err": "Time sync error: {e}",
+        "log_vpn_offset": "Total offset: {total:.2f} sec (auto: {drift:.2f} + manual: {manual})",
+        "log_vpn_no_cli": "Pritunl CLI not found: {path}",
+        "log_vpn_internet_restored": "Internet restored!",
+        "log_vpn_no_internet": "No internet connection...",
+        "log_vpn_importing": "Importing new file: {name}",
+        "log_vpn_import_err": "Import error for {name}: {e}",
+        "log_vpn_no_secret": "Secret for '{name}' not found! Open Settings and click Save.",
+        "log_vpn_totp_err": "TOTP generation failed for {name}",
+        "log_vpn_connecting": "Connecting to {name}...",
+        "log_vpn_disconnecting_all": "Shutting down: disconnecting all profiles...",
+        "log_vpn_disconnecting": "Disconnecting: {name}",
+        "log_vpn_started": "Pritunl Auto-Monitor started.",
+        "log_vpn_empty_profiles": "Profile list empty. Importing from folder...",
+        "log_vpn_initiating": "Initiating connection: {name}",
+        "log_vpn_status": "VPN status: {msg}",
+        "log_vpn_monitor_stopped": "Monitor stopped.",
+        "log_vpn_profiles_err": "get_profiles error: {e}",
+        "log_vpn_profiles_save_err": "Failed to save profiles list: {e}",
+        "log_vpn_backoff": "Reconnect delay: {delay}s",
+        "log_vpn_active": "Active: {active}/{total}",
+
+        # --- NETWORK LOGS ---
+        "log_net_checking": "Checking internet: {host}",
+        "log_net_available": "Internet available.",
+        "log_net_unavailable": "Internet unavailable.",
+        "log_net_ping_err": "Ping error: {e}",
+
+        # --- CONTROLLER LOGS ---
+        "log_ctrl_stopping": "Stopping monitoring system...",
+        "log_ctrl_autopilot_err": "Autopilot error: {e}",
+        "log_ctrl_telemart_err": "Telemart error: {e}",
+        "log_ctrl_bg_err": "Background task error: {e}",
+        "log_ctrl_forced_shutdown": "Forced shutdown after timeout",
+
+        # --- UPDATER LOGS ---
+        "log_upd_found": "Update found: {tag}. Downloading...",
+        "log_upd_err": "Updater error: {e}",
+        "log_upd_verified": "Update downloaded and verified: {tag}",
+        "log_upd_size_err": "Size mismatch: expected {expected}, got {actual}",
+        "log_upd_not_pe": "Downloaded file is not a valid PE executable",
+        "log_upd_sha_fail": "SHA-256 mismatch: expected {expected}, got {actual}",
+        "log_upd_sha_ok": "SHA-256 verified OK",
+        "log_upd_verify_fail": "Download verification failed, removing file",
+
+        "tray_show": "Show",
+        "tray_quit": "Quit",
     },
 
     "ua": {
@@ -256,7 +360,59 @@ TRANSLATIONS = {
             "3. Програма просканує Pritunl та знайде профілі.\n"
             "4. Поверніться до Налаштувань (⚙️) та\n"
             "   введіть секрети 2FA для знайдених профілів."
-        )
+        ),
+
+        # --- VPN LOGS ---
+        "log_vpn_syncing": "Синхронізація часу...",
+        "log_vpn_ntp_ok": "NTP OK. Авто-дрифт: {drift:.2f} сек.",
+        "log_vpn_http_ok": "HTTP OK. Авто-дрифт: {drift:.2f} сек.",
+        "log_vpn_sync_err": "Помилка синхронізації: {e}",
+        "log_vpn_offset": "Підсумкове зміщення: {total:.2f} сек. (авто: {drift:.2f} + ручне: {manual})",
+        "log_vpn_no_cli": "Pritunl CLI не знайдено: {path}",
+        "log_vpn_internet_restored": "Інтернет відновлено!",
+        "log_vpn_no_internet": "Інтернет відсутній...",
+        "log_vpn_importing": "Імпорт нового файлу: {name}",
+        "log_vpn_import_err": "Помилка імпорту {name}: {e}",
+        "log_vpn_no_secret": "Секрет для '{name}' не знайдено! Відкрийте Налаштування та натисніть 'Зберегти'.",
+        "log_vpn_totp_err": "Помилка генерації TOTP для {name}",
+        "log_vpn_connecting": "Підключення до {name}...",
+        "log_vpn_disconnecting_all": "Завершення: відключення всіх профілів...",
+        "log_vpn_disconnecting": "Відключення: {name}",
+        "log_vpn_started": "Pritunl Auto-Monitor запущено.",
+        "log_vpn_empty_profiles": "Список профілів порожній. Імпорт з папки...",
+        "log_vpn_initiating": "Ініціюю підключення: {name}",
+        "log_vpn_status": "Статус VPN: {msg}",
+        "log_vpn_monitor_stopped": "Моніторинг зупинено.",
+        "log_vpn_profiles_err": "Помилка get_profiles: {e}",
+        "log_vpn_profiles_save_err": "Не вдалося зберегти список профілів: {e}",
+        "log_vpn_backoff": "Затримка перепідключення: {delay} сек.",
+        "log_vpn_active": "Активні: {active} з {total}",
+
+        # --- NETWORK LOGS ---
+        "log_net_checking": "Перевірка інтернету: {host}",
+        "log_net_available": "Інтернет доступний.",
+        "log_net_unavailable": "Інтернет недоступний.",
+        "log_net_ping_err": "Помилка пінгу: {e}",
+
+        # --- CONTROLLER LOGS ---
+        "log_ctrl_stopping": "Зупинка системи моніторингу...",
+        "log_ctrl_autopilot_err": "Помилка автопілота: {e}",
+        "log_ctrl_telemart_err": "Помилка Telemart: {e}",
+        "log_ctrl_bg_err": "Помилка фонового завдання: {e}",
+        "log_ctrl_forced_shutdown": "Примусове завершення після таймауту",
+
+        # --- UPDATER LOGS ---
+        "log_upd_found": "Знайдено оновлення: {tag}. Завантаження...",
+        "log_upd_err": "Помилка оновлення: {e}",
+        "log_upd_verified": "Оновлення завантажено та перевірено: {tag}",
+        "log_upd_size_err": "Невідповідність розміру: очікувалось {expected}, отримано {actual}",
+        "log_upd_not_pe": "Завантажений файл не є виконуваним PE",
+        "log_upd_sha_fail": "SHA-256 не збігається: очікувалось {expected}, отримано {actual}",
+        "log_upd_sha_ok": "SHA-256 перевірено OK",
+        "log_upd_verify_fail": "Перевірка завантаження не пройдена, файл видалено",
+
+        "tray_show": "Показати",
+        "tray_quit": "Вихід",
     }
 }
 

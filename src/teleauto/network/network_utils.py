@@ -1,16 +1,18 @@
 # src/teleauto/network/network_utils.py
 import subprocess
+import logging
 import time
 import re
 import platform
 from src.teleauto.localization import tr
+from src.teleauto.gui.constants import PING_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 
-# --- ОБНОВЛЕНО: добавлен cancel_event ---
 def wait_for_internet(host="1.1.1.1", timeout=5, retry_interval=5, cancel_event=None):
-    print(tr("log_net_checking", host=host))
+    logger.info(tr("log_net_checking", host=host))
     while True:
-        # ПРОВЕРКА ОТМЕНЫ
         if cancel_event and cancel_event.is_set():
             return False
 
@@ -28,22 +30,22 @@ def wait_for_internet(host="1.1.1.1", timeout=5, retry_interval=5, cancel_event=
                 startupinfo=startupinfo
             )
             if "TTL=" in result.stdout:
-                print(tr("log_net_available"))
+                logger.info(tr("log_net_available"))
                 return True
             else:
-                print(tr("log_net_unavailable"))
+                logger.info(tr("log_net_unavailable"))
         except Exception as e:
-            print(tr("log_net_ping_err", e=e))
+            logger.error(tr("log_net_ping_err", e=e))
 
-        # Ждем с возможностью быстрого выхода
-        for _ in range(retry_interval * 2):  # проверяем каждые 0.5 сек
+        for _ in range(retry_interval * 2):
             if cancel_event and cancel_event.is_set():
                 return False
             time.sleep(0.5)
 
 
-# check_internet_ping оставляем без изменений
-def check_internet_ping(host="1.1.1.1", timeout=1000):
+def check_internet_ping(host="1.1.1.1", timeout=None):
+    if timeout is None:
+        timeout = PING_TIMEOUT
     try:
         startupinfo = None
         if platform.system() == "Windows":
