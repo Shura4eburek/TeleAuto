@@ -145,6 +145,17 @@ TRANSLATIONS = {
 
         "tray_show": "Показать",
         "tray_quit": "Выход",
+
+        # --- UPDATE DIALOG ---
+        "update_dialog_title": "Доступно обновление",
+        "update_dialog_msg": "Доступна версия {tag}. Установить сейчас?",
+        "update_now_btn": "Обновить сейчас",
+        "update_later_btn": "Позже",
+        "update_downloading": "Загрузка...",
+        "update_applying": "Применение обновления...",
+        "update_failed": "Ошибка загрузки",
+        "log_upd_downloading": "Загрузка обновления...",
+        "log_upd_applying": "Запуск установщика обновления...",
     },
 
     "en": {
@@ -279,6 +290,17 @@ TRANSLATIONS = {
 
         "tray_show": "Show",
         "tray_quit": "Quit",
+
+        # --- UPDATE DIALOG ---
+        "update_dialog_title": "Update Available",
+        "update_dialog_msg": "Version {tag} is available. Install now?",
+        "update_now_btn": "Update now",
+        "update_later_btn": "Later",
+        "update_downloading": "Downloading...",
+        "update_applying": "Applying update...",
+        "update_failed": "Download failed",
+        "log_upd_downloading": "Downloading update...",
+        "log_upd_applying": "Launching update installer...",
     },
 
     "ua": {
@@ -413,6 +435,17 @@ TRANSLATIONS = {
 
         "tray_show": "Показати",
         "tray_quit": "Вихід",
+
+        # --- UPDATE DIALOG ---
+        "update_dialog_title": "Доступне оновлення",
+        "update_dialog_msg": "Доступна версія {tag}. Встановити зараз?",
+        "update_now_btn": "Оновити зараз",
+        "update_later_btn": "Пізніше",
+        "update_downloading": "Завантаження...",
+        "update_applying": "Застосування оновлення...",
+        "update_failed": "Помилка завантаження",
+        "log_upd_downloading": "Завантаження оновлення...",
+        "log_upd_applying": "Запуск інсталятора оновлення...",
     }
 }
 

@@ -1,9 +1,9 @@
 import sys
 import ctypes
 
-def apply_window_settings(window):
-    """Применяет темный заголовок (Windows) и модальность."""
-    # 1. Dark Title Bar
+
+def apply_dark_title_bar(window):
+    """Применяет только темный заголовок (Windows). Безопасно для главного окна."""
     if sys.platform.startswith("win"):
         try:
             window.update()
@@ -13,11 +13,16 @@ def apply_window_settings(window):
             hwnd = get_parent(window.winfo_id())
             value = 2
             set_window_attribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(ctypes.c_int(value)), 4)
-        except Exception: pass
+        except Exception:
+            pass
 
-    # 2. Modality
+
+def apply_window_settings(window):
+    """Применяет темный заголовок и модальность для диалоговых окон."""
+    apply_dark_title_bar(window)
     try:
         window.lift()
         window.focus_force()
         window.grab_set()
-    except Exception: pass
+    except Exception:
+        pass

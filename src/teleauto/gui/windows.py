@@ -463,3 +463,54 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def delete(self):
         if messagebox.askyesno("Reset", tr("delete_confirm")): clear_credentials(); self.master_app.quit()
+
+
+class UpdateDialog(ctk.CTkToplevel):
+    """Startup dialog asking the user to update now or later."""
+
+    def __init__(self, master_app, tag, on_now, on_later):
+        super().__init__(master_app)
+        self.on_later_cb = on_later
+        self.title(tr("update_dialog_title"))
+        self.geometry("400x170")
+        self.resizable(False, False)
+        self.transient(master_app)
+        self.grab_set()
+        self.after(10, lambda: apply_window_settings(self))
+
+        f_label = (MAIN_FONT_FAMILY, 12)
+        f_hint  = (MAIN_FONT_FAMILY, 11)
+        f_btn   = (MAIN_FONT_FAMILY, 12, "bold")
+
+        self.msg_label = ctk.CTkLabel(self, text=tr("update_dialog_msg", tag=tag),
+                                      font=f_label, wraplength=360)
+        self.msg_label.pack(pady=(20, 6))
+
+        self.status_label = ctk.CTkLabel(self, text="", font=f_hint, text_color="#888888")
+        self.status_label.pack(pady=(0, 8))
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(0, 20))
+
+        self.now_btn = ctk.CTkButton(btn_frame, text=tr("update_now_btn"), font=f_btn,
+                                     width=160, command=lambda: on_now(self))
+        self.now_btn.pack(side="left", padx=(0, 12))
+
+        self.later_btn = ctk.CTkButton(btn_frame, text=tr("update_later_btn"), font=f_btn,
+                                       width=120, fg_color="gray30", hover_color="gray40",
+                                       command=self._on_later)
+        self.later_btn.pack(side="left")
+
+        self.protocol("WM_DELETE_WINDOW", self._on_later)
+
+    def _on_later(self):
+        self.destroy()
+        if self.on_later_cb:
+            self.on_later_cb()
+
+    def set_status(self, text, color="#888888"):
+        self.status_label.configure(text=text, text_color=color)
+
+    def disable_buttons(self):
+        self.now_btn.configure(state="disabled")
+        self.later_btn.configure(state="disabled")

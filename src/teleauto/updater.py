@@ -13,14 +13,22 @@ from src.teleauto.localization import tr
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Shura4eburek/TeleAuto"
-
-# PE executable magic bytes
 _PE_MAGIC = b"MZ"
+_NEW_EXE_NAME = "TeleAuto_new.exe"
+
+
+def _is_packaged():
+    return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+
+
+def _get_new_exe_path():
+    if _is_packaged():
+        return os.path.join(os.path.dirname(sys.executable), _NEW_EXE_NAME)
+    return _NEW_EXE_NAME
 
 
 def _verify_download(file_path, asset, release_body):
     """Verify downloaded file: size, PE header, and optional SHA-256 from release body."""
-    # Check file size matches asset size
     expected_size = asset.get("size")
     if expected_size:
         actual_size = os.path.getsize(file_path)
@@ -28,14 +36,12 @@ def _verify_download(file_path, asset, release_body):
             logger.error(tr("log_upd_size_err", expected=expected_size, actual=actual_size))
             return False
 
-    # Check PE header (MZ magic)
     with open(file_path, "rb") as f:
         header = f.read(2)
     if header != _PE_MAGIC:
         logger.error(tr("log_upd_not_pe"))
         return False
 
-    # Check SHA-256 if present in release body
     if release_body:
         sha_match = re.search(r"SHA256:\s*([a-fA-F0-9]{64})", release_body)
         if sha_match:
@@ -53,84 +59,113 @@ def _verify_download(file_path, asset, release_body):
     return True
 
 
-def check_and_download(current_ver):
-    """Check GitHub for updates and download if newer version exists."""
+def check_for_update(current_ver):
+    """
+    Fast API-only check. Does NOT download anything.
+    Returns (tag, asset_info) if update is available, or (None, None).
+    """
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         resp = requests.get(url, timeout=UPDATER_API_TIMEOUT)
 
         if resp.status_code != 200:
-            return False, None
+            return None, None
 
         data = resp.json()
         remote_tag = data.get("tag_name", "v0.0")
 
         if version.parse(remote_tag.replace("v", "")) <= version.parse(current_ver.replace("v", "")):
-            return False, None
+            return None, None
 
         logger.info(tr("log_upd_found", tag=remote_tag))
 
-        exe_asset = None
         for asset in data.get("assets", []):
             if asset["name"].endswith(".exe"):
-                exe_asset = asset
-                break
+                return remote_tag, {"asset": asset, "body": data.get("body", "")}
 
-        if not exe_asset:
-            return False, None
-
-        exe_url = exe_asset["browser_download_url"]
-        new_exe_path = "TeleAuto_new.exe"
-        with requests.get(exe_url, stream=True) as r:
-            r.raise_for_status()
-            with open(new_exe_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-        # Verify the download
-        release_body = data.get("body", "")
-        if not _verify_download(new_exe_path, exe_asset, release_body):
-            logger.error(tr("log_upd_verify_fail"))
-            os.remove(new_exe_path)
-            return False, None
-
-        logger.info(tr("log_upd_verified", tag=remote_tag))
-        return True, remote_tag
+        return None, None
 
     except Exception as e:
         logger.error(tr("log_upd_err", e=e))
-        return False, None
+        return None, None
 
 
-def create_update_batch():
-    """Create BAT file for exe replacement on exit."""
-    current_exe = os.path.basename(sys.executable)
-    new_exe = "TeleAuto_new.exe"
+def download_update(asset_info):
+    """
+    Download and verify new exe.
+    Returns path to downloaded file, or None on failure.
+    """
+    asset = asset_info["asset"]
+    body = asset_info.get("body", "")
+    new_exe_path = _get_new_exe_path()
 
-    vbs_msg = 'MsgBox "TeleAuto updated successfully!", 64, "TeleAuto Update"'
+    try:
+        logger.info(tr("log_upd_downloading"))
+        with requests.get(asset["browser_download_url"], stream=True) as r:
+            r.raise_for_status()
+            with open(new_exe_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-    bat_content = f"""
-@echo off
-timeout /t 2 /nobreak > NUL
-:loop
-tasklist | find /i "{current_exe}" >nul
-if %errorlevel%==0 (
-    timeout /t 1 >nul
-    goto loop
-)
-if exist "{current_exe}" del "{current_exe}"
-if exist "{new_exe}" move "{new_exe}" "{current_exe}"
+        if not _verify_download(new_exe_path, asset, body):
+            logger.error(tr("log_upd_verify_fail"))
+            os.remove(new_exe_path)
+            return None
 
-echo {vbs_msg} > success.vbs
-cscript //nologo success.vbs
-del success.vbs
-del "%~f0"
-"""
-    with open("updater.bat", "w") as f:
-        f.write(bat_content)
+        logger.info(tr("log_upd_verified", tag=asset["name"]))
+        return new_exe_path
+
+    except Exception as e:
+        logger.error(tr("log_upd_err", e=e))
+        if os.path.exists(new_exe_path):
+            os.remove(new_exe_path)
+        return None
 
 
-def schedule_update_on_exit():
-    """Launch update mechanism silently."""
-    create_update_batch()
-    subprocess.Popen(["updater.bat"], shell=True, creationflags=0x08000000)
+def apply_update(new_exe_path):
+    """
+    Launch a PowerShell script that waits for this process to exit,
+    replaces the exe with the new one, and relaunches it.
+    Only works when running as a packaged exe (PyInstaller).
+    Returns True if the updater was launched successfully.
+    """
+    if not _is_packaged():
+        logger.warning("Update skipped: not running as packaged exe")
+        return False
+
+    try:
+        current_exe = os.path.abspath(sys.executable)
+        new_exe_abs = os.path.abspath(new_exe_path)
+        proc_name = os.path.splitext(os.path.basename(current_exe))[0]
+        ps_path = os.path.join(os.path.dirname(current_exe), "updater.ps1")
+
+        ps_script = (
+            f"$old = '{current_exe}'\n"
+            f"$new = '{new_exe_abs}'\n"
+            f"$name = '{proc_name}'\n"
+            "\n"
+            "# Wait for the app to exit\n"
+            "do {\n"
+            "    Start-Sleep -Milliseconds 300\n"
+            "} while (Get-Process -Name $name -ErrorAction SilentlyContinue)\n"
+            "\n"
+            "Start-Sleep -Milliseconds 500\n"
+            "Remove-Item $old -Force -ErrorAction SilentlyContinue\n"
+            "Move-Item $new $old -Force\n"
+            "Start-Process $old\n"
+            "Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue\n"
+        )
+
+        with open(ps_path, "w", encoding="utf-8") as f:
+            f.write(ps_script)
+
+        subprocess.Popen(
+            ["powershell", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ps_path],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        logger.info(tr("log_upd_applying"))
+        return True
+
+    except Exception as e:
+        logger.error(tr("log_upd_err", e=e))
+        return False

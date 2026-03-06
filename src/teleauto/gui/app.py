@@ -11,9 +11,9 @@ from PIL import Image
 
 from src.teleauto.localization import tr, set_language
 from src.teleauto.controller import AppController
-from src.teleauto.gui.windows import ConfigWindow, PinWindow, SettingsWindow
+from src.teleauto.gui.windows import ConfigWindow, PinWindow, SettingsWindow, UpdateDialog
 from src.teleauto.gui.main_view import MainWindow
-from src.teleauto.gui.utils import apply_window_settings
+from src.teleauto.gui.utils import apply_window_settings, apply_dark_title_bar
 from src.teleauto.gui.constants import VERSION
 from src.teleauto.gui.fonts import load_custom_font
 
@@ -34,7 +34,7 @@ class App(ctk.CTk):
         self.title("TeleAuto")
         self.geometry("550x280")
         self.resizable(False, False)
-        self.after(10, lambda: apply_window_settings(self))
+        self.after(10, lambda: apply_dark_title_bar(self))
 
         # Start background tasks (update check, network monitor)
         self.ctrl.start_background_tasks()
@@ -83,7 +83,7 @@ class App(ctk.CTk):
         self.on_disconnect_click(startup=True)
 
         if self.ctrl.update_ready and self.ctrl.new_version_tag:
-            self.main_frame.show_update_ready(self.ctrl.new_version_tag)
+            self.after(400, lambda: self._show_update_dialog(self.ctrl.new_version_tag))
 
         # Setup system tray
         self._setup_tray()
@@ -142,12 +142,7 @@ class App(ctk.CTk):
     # --- System Tray ---
     def _setup_tray(self):
         try:
-            icon_path = self._get_icon_path()
-            if not icon_path or not os.path.exists(icon_path):
-                logger.warning("icon.ico not found, tray disabled")  # internal, no tr()
-                return
-
-            image = Image.open(icon_path)
+            image = self._get_tray_image()
             menu = pystray.Menu(
                 pystray.MenuItem(tr("tray_show"), self._show_from_tray, default=True),
                 pystray.MenuItem(tr("tray_quit"), self._quit_from_tray),
@@ -159,13 +154,29 @@ class App(ctk.CTk):
             logger.warning("Failed to setup tray: %s", e)
 
     @staticmethod
+    def _get_tray_image():
+        """Load icon.ico if it exists, otherwise generate a simple fallback icon."""
+        icon_path = App._get_icon_path()
+        if icon_path and os.path.exists(icon_path):
+            return Image.open(icon_path)
+        # Fallback: blue circle — works without icon.ico in dev mode
+        from PIL import ImageDraw
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(img).ellipse([4, 4, 60, 60], fill=(30, 144, 255, 255))
+        return img
+
+    @staticmethod
     def _get_icon_path():
-        # PyInstaller bundled path
+        # PyInstaller bundled: files are in sys._MEIPASS
         try:
-            base = sys._MEIPASS
+            return os.path.join(sys._MEIPASS, "icon.ico")
         except AttributeError:
-            base = os.path.abspath(".")
-        return os.path.join(base, "icon.ico")
+            pass
+        # Development: look relative to this file's location (src/teleauto/gui/ → project root)
+        here = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+        candidate = os.path.join(project_root, "icon.ico")
+        return candidate if os.path.exists(candidate) else None
 
     def _on_close_button(self):
         """Close button minimizes to tray if tray is running, otherwise quits."""
@@ -183,11 +194,38 @@ class App(ctk.CTk):
     def _quit_from_tray(self, icon=None, item=None):
         self.after(0, self.on_closing)
 
+    def on_update_found(self, tag):
+        """Called from controller (via after()) when a new version is detected."""
+        if self.main_frame:
+            self._show_update_dialog(tag)
+        # If main_frame not ready yet — show_main_window() will handle it via update_ready flag
+
+    def _show_update_dialog(self, tag):
+        UpdateDialog(self, tag, on_now=self._do_update_now, on_later=self._do_update_later)
+
+    def _do_update_now(self, dialog):
+        dialog.disable_buttons()
+        dialog.set_status(tr("update_downloading"))
+
+        def _worker():
+            success = self.ctrl.do_download_and_apply()
+            if success:
+                dialog.after(0, lambda: dialog.set_status(tr("update_applying"), color="#00CC44"))
+                dialog.after(800, self.on_closing)
+            else:
+                dialog.after(0, lambda: dialog.set_status(tr("update_failed"), color="#FF4444"))
+                dialog.after(0, lambda: dialog.later_btn.configure(state="normal"))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _do_update_later(self):
+        if self.main_frame and self.ctrl.new_version_tag:
+            self.main_frame.show_update_ready(self.ctrl.new_version_tag)
+
     def install_update_now(self):
-        from src.teleauto.updater import schedule_update_on_exit
-        if messagebox.askyesno(tr("update_label"), "Install update and restart?"):
-            schedule_update_on_exit()
-            self.on_closing()
+        """Called from the header update button in MainWindow."""
+        if self.ctrl.new_version_tag:
+            self._show_update_dialog(self.ctrl.new_version_tag)
 
     def on_closing(self):
         # Stop tray icon if running

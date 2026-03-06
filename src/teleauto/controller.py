@@ -10,7 +10,7 @@ from src.teleauto.localization import tr, set_language
 from src.teleauto.login.login import login_telemart, start_telemart
 from src.teleauto.vpn.pritunl_auto import PritunlAutopilot
 from src.teleauto.network.network_utils import check_internet_ping
-from src.teleauto.updater import check_and_download
+from src.teleauto.updater import check_for_update, download_update, apply_update
 from src.teleauto.gui.constants import (
     VERSION, NETWORK_MONITOR_INTERVAL, TELEMART_LAUNCH_DELAY,
 )
@@ -36,6 +36,7 @@ class AppController:
         self.net_monitor_running = True
         self.update_ready = False
         self.new_version_tag = None
+        self.update_asset_info = None
 
         self._executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
         self._futures = []
@@ -196,12 +197,22 @@ class AppController:
 
     # --- Update ---
     def bg_update_check(self):
+        """Fast API check only — no download. Notifies UI when update is found."""
         try:
-            downloaded, tag = check_and_download(VERSION)
-            if downloaded:
-                self.update_ready = True
+            tag, asset_info = check_for_update(VERSION)
+            if tag:
                 self.new_version_tag = tag
-                if self.ui.main_frame:
-                    self.ui.main_frame.after(0, lambda: self.ui.main_frame.show_update_ready(tag))
+                self.update_asset_info = asset_info
+                self.update_ready = True
+                self.ui.after(0, lambda: self.ui.on_update_found(tag))
         except Exception:
             pass
+
+    def do_download_and_apply(self):
+        """Download + apply update. Call from a background thread. Returns True on success."""
+        if not self.update_asset_info:
+            return False
+        path = download_update(self.update_asset_info)
+        if path:
+            return apply_update(path)
+        return False
