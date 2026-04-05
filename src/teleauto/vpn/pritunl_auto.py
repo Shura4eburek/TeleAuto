@@ -30,7 +30,7 @@ PROFILES_FILE = "profiles.json"
 # ================================================
 
 class PritunlAutopilot:
-    def __init__(self, stop_event=None, status_callback=None, secrets_dict=None, manual_offset=0):
+    def __init__(self, stop_event=None, status_callback=None, secrets_dict=None, manual_offset=0, profile_status_callback=None):
         self.cli = CLI_PATH
         self.manual_offset_val = manual_offset
         self.time_offset = 0
@@ -38,6 +38,8 @@ class PritunlAutopilot:
         self.internet_was_down = False
         self.stop_event = stop_event or threading.Event()
         self.status_callback = status_callback
+        self.profile_status_callback = profile_status_callback
+        self._last_profile_statuses: dict = {}
 
         self.is_connected_state = False
         self.last_connected_count = -1
@@ -255,6 +257,12 @@ class PritunlAutopilot:
                         self.connect(p['id'], p['name'])
                         time.sleep(VPN_RECONNECT_DELAY)
                         any_connecting = True
+
+                if self.profile_status_callback:
+                    current_statuses = {p['name']: p['status'] for p in profiles}
+                    if current_statuses != self._last_profile_statuses:
+                        self._last_profile_statuses = current_statuses
+                        self.profile_status_callback(current_statuses)
 
                 if active_count > 0:
                     # Reset backoff on success

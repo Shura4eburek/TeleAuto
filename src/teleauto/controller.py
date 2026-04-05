@@ -27,6 +27,8 @@ class AppController:
     def __init__(self, ui):
         self.ui = ui
         self.creds = load_credentials()
+        if self.creds:
+            set_language(self.creds.get("language", "ru"))
         self.user_pin = None
 
         self.autopilot_stop_event = threading.Event()
@@ -87,6 +89,8 @@ class AppController:
     # --- Credentials ---
     def load_creds(self):
         self.creds = load_credentials()
+        if self.creds:
+            set_language(self.creds.get("language", "ru"))
 
     def decrypt_and_set_language(self, pin):
         self.user_pin = pin
@@ -108,6 +112,9 @@ class AppController:
         elif state == "working":
             self.ui.main_frame.after(0, lambda: self.ui.set_ui_status("monitor", "working", "status_working"))
 
+    def update_profile_statuses(self, statuses: dict):
+        self.ui.main_frame.after(0, lambda: self.ui._push({"type": "profile_status", "profiles": statuses}))
+
     def run_autopilot_logic(self):
         try:
             self.ui.set_ui_status("pritunl", "working", "status_working")
@@ -126,7 +133,8 @@ class AppController:
                 stop_event=self.autopilot_stop_event,
                 status_callback=self.update_autopilot_ui,
                 secrets_dict=decrypted_secrets,
-                manual_offset=offset_val
+                manual_offset=offset_val,
+                profile_status_callback=self.update_profile_statuses,
             )
 
             self.vpn_is_connected = True
