@@ -399,3 +399,24 @@ credentials.json
 .venv/
 teleauto.log
 teleauto.log.*
+
+# Runtime files (root level)
+/profiles.json
+/profiles/
+/credentials.json
+TeleAuto_new.exe
+
+# Dist runtime artifacts
+/dist/credentials.json
+/dist/profiles/
+/dist/teleauto.log
+/dist/teleauto.log.*
+/dist/traceback.txt
+
+# Claude Code project data
+.claude/
+
+# Experimental / scratch
+google_ai_design/
+backtoreality.txt
+traceback.txt
