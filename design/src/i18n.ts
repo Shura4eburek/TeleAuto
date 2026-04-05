@@ -57,6 +57,8 @@ export const UI = {
     // Shutdown
     shutting_down:     'Завершення роботи...',
     status_waiting:    'Очікування...',
+    net_connected:     'Інтернет підключено',
+    net_disconnected:  'Немає з\'єднання',
   },
   ru: {
     config_title:      'Первоначальная настройка',
@@ -106,6 +108,8 @@ export const UI = {
     saved_msg:         'Сохранено',
     shutting_down:     'Завершение работы...',
     status_waiting:    'Ожидание...',
+    net_connected:     'Интернет подключён',
+    net_disconnected:  'Нет соединения',
   },
   en: {
     config_title:      'Initial Setup',
@@ -155,6 +159,8 @@ export const UI = {
     saved_msg:         'Saved',
     shutting_down:     'Shutting down...',
     status_waiting:    'Waiting...',
+    net_connected:     'Internet connected',
+    net_disconnected:  'No connection',
   },
 } satisfies Record<Lang, Record<string, string>>;
 

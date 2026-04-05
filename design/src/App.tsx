@@ -789,7 +789,7 @@ function MainView({
           <div className="flex items-center gap-1.5">
             <Wifi size={12} className={net.connected ? 'text-[#34C759]' : 'text-white/40'} />
             <span className="text-[11px] text-white/60 font-medium">
-              {net.connected ? 'Інтернет підключено' : 'Немає з\'єднання'}
+              {net.connected ? t('net_connected') : t('net_disconnected')}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
