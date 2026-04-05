@@ -1,152 +1,293 @@
 # src/teleauto/gui/widgets.py
-import sys
-import customtkinter as ctk
-from PIL import Image, ImageDraw
-from src.teleauto.localization import tr
-from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY
+from PyQt6.QtWidgets import QWidget, QFrame, QLabel, QVBoxLayout
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
+from PyQt6.QtGui import (
+    QPainter, QColor, QFont, QPen, QPainterPath,
+    QLinearGradient, QBrush,
+)
+
+from .constants import LED_BLINK_INTERVAL, BODY_FONT
 
 
-# --- LED Circle ---
-class LEDCircle(ctk.CTkLabel):
-    def __init__(self, master, size=15, fg_color="transparent", **kwargs):
-        super().__init__(master, text="", width=size, height=size, fg_color=fg_color, **kwargs)
-        self.size = size
-        self.colors = {
-            "off": "#151515", "shadow": "#111111",
-            "working": "#FFD700", "working_dim": "#8B7500",
-            "success": "#00DD00", "error": "#FF4444"
-        }
-        self._state = "off"
-        self._blink_job = None
-        self._blink_state = False
-        self._images = {}
-        for k, c in self.colors.items():
-            if k != "shadow": self._images[k] = self._draw_circle(c)
-        self.set_state("off")
+# ---------------------------------------------------------------------------
+# LED indicator
+# ---------------------------------------------------------------------------
+class LEDWidget(QWidget):
+    _COLORS = {
+        "off":         QColor("#151515"),
+        "success":     QColor("#34C759"),
+        "error":       QColor("#FF453A"),
+        "working":     QColor("#FFD60A"),
+        "working_dim": QColor("#7A6400"),
+        "waiting":     QColor("#FFD60A"),
+        "connecting":  QColor("#FFD60A"),
+    }
 
-    def _draw_circle(self, color):
-        scale = 4;
-        s = int(self.size * scale);
-        pad = int(4 * scale)
-        img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        draw.ellipse((0, 0, s - 1, s - 1), fill=self.colors["shadow"])
-        draw.ellipse((pad, pad, s - pad - 1, s - pad - 1), fill=color)
-        img = img.resize((self.size, self.size), Image.Resampling.LANCZOS)
-        return ctk.CTkImage(light_image=img, dark_image=img, size=(self.size, self.size))
+    def __init__(self, size: int = 14, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._color = self._COLORS["off"]
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._blink)
+        self._blink_on = True
 
-    def start_blinking(self):
-        if self._blink_job is None: self._blink_loop()
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        s = self.width()
+        pad = max(1, s // 7)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#111111"))
+        p.drawEllipse(0, 0, s, s)
+        p.setBrush(self._color)
+        p.drawEllipse(pad, pad, s - 2 * pad, s - 2 * pad)
 
-    def stop_blinking(self):
-        if self._blink_job: self.after_cancel(self._blink_job); self._blink_job = None
-
-    def _blink_loop(self):
-        key = "working" if self._blink_state else "working_dim"
-        self.configure(image=self._images[key])
-        self._blink_state = not self._blink_state
-        self._blink_job = self.after(600, self._blink_loop)
-
-    def set_state(self, state):
-        self.stop_blinking();
-        self._state = state
-        if state == "waiting":
-            self.start_blinking()
+    def set_state(self, state: str):
+        self._timer.stop()
+        self._blink_on = True
+        if state in ("working", "connecting", "waiting"):
+            self._color = self._COLORS["working"]
+            self.update()
+            self._timer.start(LED_BLINK_INTERVAL)
         else:
-            self.configure(image=self._images.get(state, self._images["off"]))
+            self._color = self._COLORS.get(state, self._COLORS["off"])
+            self.update()
+
+    def _blink(self):
+        self._blink_on = not self._blink_on
+        self._color = self._COLORS["working"] if self._blink_on else self._COLORS["working_dim"]
+        self.update()
 
 
-# --- TitleBox ---
-class TitleBox(ctk.CTkFrame):
-    def __init__(self, master, title, **kwargs):
-        super().__init__(master, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                         fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR, **kwargs)
-        self.pack_propagate(False)
+# ---------------------------------------------------------------------------
+# Gradient icon — 32×32 rounded rect with gradient bg + Lucide-style icon
+# ---------------------------------------------------------------------------
+class GradientIcon(QWidget):
+    """32×32 macOS-style app icon with gradient background and vector icon."""
 
-        self.led = LEDCircle(self, size=15, fg_color=FRAME_BG)
-        # ИСПРАВЛЕНО: rely=0.43 (поднимаем LED к тексту)
-        self.led.place(x=10, rely=0.43, anchor="w")
+    _GRADIENTS = {
+        "lock":     (QColor("#34C759"), QColor("#28A745")),
+        "monitor":  (QColor("#5E5CE6"), QColor("#4B49B8")),
+        "activity": (QColor("#8E8E93"), QColor("#636366")),
+    }
 
-        self.label = ctk.CTkLabel(self, text=title, text_color="#E0E0E0",
-                                  font=ctk.CTkFont(family=MAIN_FONT_FAMILY, size=13, weight="bold"))
-        # ИСПРАВЛЕНО: rely=0.43
-        self.label.place(x=33, rely=0.43, anchor="w")
+    def __init__(self, kind: str, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self._kind = kind
 
-    def set_led(self, state): self.led.set_state(state)
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Gradient background
+        c1, c2 = self._GRADIENTS.get(self._kind, (QColor("#555"), QColor("#333")))
+        grad = QLinearGradient(QPointF(0, 0), QPointF(0, 32))
+        grad.setColorAt(0, c1)
+        grad.setColorAt(1, c2)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(grad))
+        p.drawRoundedRect(QRectF(0, 0, 32, 32), 8, 8)
+
+        # Subtle border
+        pen_b = QPen(QColor(255, 255, 255, 51), 1)
+        p.setPen(pen_b)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(0.5, 0.5, 31, 31), 7.5, 7.5)
+
+        # Vector icon — drawn in 24-unit space, scaled to 16px, centered in 32px
+        p.translate(8.0, 8.0)
+        sc = 16.0 / 24.0
+        p.scale(sc, sc)
+
+        icon_pen = QPen(QColor(255, 255, 255), 2.5 / sc)
+        icon_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        icon_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(icon_pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        if self._kind == "lock":
+            self._draw_lock(p)
+        elif self._kind == "monitor":
+            self._draw_monitor(p)
+        elif self._kind == "activity":
+            self._draw_activity(p)
+
+    @staticmethod
+    def _draw_lock(p: QPainter):
+        # Body
+        p.drawRoundedRect(QRectF(3, 11, 18, 11), 2, 2)
+        # Shackle arc (top semicircle)
+        path = QPainterPath()
+        path.moveTo(7, 11)
+        path.lineTo(7, 7)
+        path.arcTo(QRectF(7, 2, 10, 10), 180, 180)
+        path.lineTo(17, 11)
+        p.drawPath(path)
+
+    @staticmethod
+    def _draw_monitor(p: QPainter):
+        p.drawRoundedRect(QRectF(2, 3, 20, 14), 2, 2)
+        p.drawLine(QPointF(12, 17), QPointF(12, 20))
+        p.drawLine(QPointF(8, 20), QPointF(16, 20))
+
+    @staticmethod
+    def _draw_activity(p: QPainter):
+        path = QPainterPath()
+        for i, (x, y) in enumerate([(22,12),(18,12),(15,20),(9,4),(6,12),(2,12)]):
+            if i == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
+        p.drawPath(path)
 
 
-# --- StatusBox ---
-class StatusBox(ctk.CTkFrame):
-    def __init__(self, master, text_key="status_waiting", **kwargs):
-        super().__init__(master, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                         fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR, **kwargs)
-        self.pack_propagate(False)
-        self.text_key = text_key
+# ---------------------------------------------------------------------------
+# Draggable header mixin (for frameless window)
+# ---------------------------------------------------------------------------
+class DragWidget(QWidget):
+    """QWidget that drags the top-level window when left-clicked and dragged."""
 
-        self.label = ctk.CTkLabel(self, text=tr(text_key), text_color="#777777",
-                                  font=ctk.CTkFont(family=MAIN_FONT_FAMILY, size=12))
-        # ИСПРАВЛЕНО: rely=0.43
-        self.label.place(relx=0.5, rely=0.43, anchor="center")
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_global = event.globalPosition().toPoint()
+            self._drag_win_origin = self.window().pos()
+        super().mousePressEvent(event)
 
-    def set_text_key(self, key, state):
-        self.text_key = key
-        self.label.configure(text=tr(key))
-        if state == "success":
-            self.label.configure(text_color="#44DD44")
-        elif state == "error":
-            self.label.configure(text_color="#FF5555")
-        elif state == "working":
-            self.label.configure(text_color="#FFD700")
-        else:
-            self.label.configure(text_color="#777777")
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and hasattr(self, '_drag_start_global'):
+            delta = event.globalPosition().toPoint() - self._drag_start_global
+            self.window().move(self._drag_win_origin + delta)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if hasattr(self, '_drag_start_global'):
+            del self._drag_start_global
+        super().mouseReleaseEvent(event)
 
 
-# --- Settings Group ---
-class SettingsGroup(ctk.CTkFrame):
-    def __init__(self, master, title_key, **kwargs):
-        super().__init__(master, fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR,
-                         corner_radius=CORNER_RADIUS, **kwargs)
-        self.title_key = title_key
-        self.grid_columnconfigure(1, weight=1)
-        self.label = ctk.CTkLabel(self, text=tr(title_key), text_color="#AAAAAA",
-                                  font=ctk.CTkFont(family=MAIN_FONT_FAMILY, size=11, weight="bold"))
-        self.label.grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(5, 5))
+# ---------------------------------------------------------------------------
+# Settings group frame
+# ---------------------------------------------------------------------------
+class SettingsGroup(QFrame):
+    def __init__(self, title_key: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("settings_group")
+        self.setStyleSheet("""
+            QFrame#settings_group {
+                background: #2C2C2E;
+                border: 1px solid #3A3A3C;
+                border-radius: 12px;
+            }
+            QFrame#settings_group QLabel { border: none; background: transparent; }
+        """)
+        self._title_key = title_key
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        self._title_lbl = QLabel(self)
+        self._title_lbl.setFont(QFont(BODY_FONT, 11))
+        self._title_lbl.setStyleSheet("color: #AAAAAA; background: transparent; border: none;")
+        self._title_lbl.setContentsMargins(10, 6, 10, 2)
+        lay.addWidget(self._title_lbl)
+
+        self.content = QFrame(self)
+        self.content.setObjectName("settings_group")
+        cl = QVBoxLayout(self.content)
+        cl.setContentsMargins(10, 4, 10, 10)
+        cl.setSpacing(6)
+        lay.addWidget(self.content)
+
+        self.refresh_text()
 
     def refresh_text(self):
-        self.label.configure(text=tr(self.title_key))
+        from src.teleauto.localization import tr
+        self._title_lbl.setText(tr(self._title_key))
+
+    def body_layout(self) -> QVBoxLayout:
+        return self.content.layout()
 
 
-# --- Logger ---
-class TextboxLogger:
-    def __init__(self, textbox):
-        self.textbox = textbox
-        self.stdout = sys.stdout
+# ---------------------------------------------------------------------------
+# Small footer icons (WiFi + Activity waveform)
+# ---------------------------------------------------------------------------
+class WiFiIcon(QWidget):
+    """Draws a 3-arc WiFi symbol."""
 
-    def write(self, message):
-        # Если есть реальная консоль (sys.stdout не None) — пишем туда
-        if self.stdout:
-            try:
-                self.stdout.write(message)
-            except Exception:
-                pass
+    def __init__(self, size: int = 16, color: str = "#8E8E93", parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._color = QColor(color)
 
-        # В любом случае пишем в GUI
-        self.textbox.after(0, self.write_to_gui, message)
+    def set_color(self, color: str):
+        self._color = QColor(color)
+        self.update()
 
-    def flush(self):
-        if self.stdout:
-            try:
-                self.stdout.flush()
-            except Exception:
-                pass
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self._color, 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
 
-    def write_to_gui(self, message):
-        try:
-            if self.textbox.winfo_exists():
-                self.textbox.insert(ctk.END, message)
-                self.textbox.see(ctk.END)
-        except:
-            pass
+        w, h = self.width(), self.height()
+        cx = w / 2
 
-    def flush(self):
-        self.stdout.flush()
+        # Three arcs, bottom-up (largest to smallest)
+        for i, (r, y_offset) in enumerate([(w * 0.48, h * 0.12),
+                                            (w * 0.32, h * 0.30),
+                                            (w * 0.16, h * 0.48)]):
+            span = 150  # degrees
+            start = 195
+            rect = QRectF(cx - r, y_offset, r * 2, r * 2)
+            p.drawArc(rect, int(start * 16), int(span * 16))
+
+        # Dot at bottom
+        dot_r = w * 0.06
+        p.setBrush(self._color)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QRectF(cx - dot_r, h * 0.72, dot_r * 2, dot_r * 2))
+
+
+class ActivityIcon(QWidget):
+    """Draws an EKG/activity waveform icon."""
+
+    def __init__(self, size: int = 16, color: str = "#8E8E93", parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._color = QColor(color)
+
+    def set_color(self, color: str):
+        self._color = QColor(color)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self._color, 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        w, h = self.width(), self.height()
+        # Points: flat left → spike up → spike down → flat right
+        pts = [
+            (0.0,  0.5),
+            (0.25, 0.5),
+            (0.38, 0.1),
+            (0.5,  0.9),
+            (0.62, 0.5),
+            (1.0,  0.5),
+        ]
+        path = QPainterPath()
+        for i, (rx, ry) in enumerate(pts):
+            pt = QPointF(rx * w, ry * h)
+            if i == 0:
+                path.moveTo(pt)
+            else:
+                path.lineTo(pt)
+        p.drawPath(path)

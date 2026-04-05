@@ -1,218 +1,623 @@
 # src/teleauto/gui/main_view.py
 import sys
-import webbrowser
-import customtkinter as ctk
+import logging
+
+from PyQt6.QtWidgets import (
+    QWidget, QFrame, QLabel, QPushButton, QPlainTextEdit,
+    QVBoxLayout, QHBoxLayout, QSizePolicy,
+)
+from PyQt6.QtCore import Qt, QTimer, QRectF
+from PyQt6.QtGui import (
+    QFont, QColor, QPainter, QPen, QPainterPath,
+)
+
 from src.teleauto.localization import tr
-from .constants import ROW_HEIGHT, CORNER_RADIUS, FRAME_BG, BORDER_COLOR, MAIN_FONT_FAMILY
-from .widgets import LEDCircle, TitleBox, StatusBox, TextboxLogger
-from .constants import VERSION
+from src.teleauto.logger import QtTextHandler, StdoutToLogger
+from .constants import MAIN_FONT_FAMILY, BODY_FONT, VERSION
+from .widgets import LEDWidget, GradientIcon, DragWidget, WiFiIcon, ActivityIcon
+
+# ── Palette ────────────────────────────────────────────────────────────────
+_WIN_BG    = "#1E1E1E"          # window background
+_WIN_BORD  = "rgba(255,255,255,51)"  # ~20% white border
+_TEXT      = "#FFFFFF"
+_TEXT70    = "rgba(255,255,255,178)"  # white/70
+_TEXT60    = "rgba(255,255,255,153)"  # white/60
+_TEXT50    = "rgba(255,255,255,128)"  # white/50
+_TEXT40    = "rgba(255,255,255,102)"  # white/40
+_GREEN     = "#34C759"
+_BLUE      = "#0A84FF"
+_ORANGE    = "#FF9F0A"
+_RED_LIGHT = "#FF5F56"
+_YLW_LIGHT = "#FFBD2E"
+_GRN_LIGHT = "#27C93F"
+
+# Group container colour
+_GRP_BG   = "rgba(255,255,255,15)"   # white/6
+_GRP_BORD = "rgba(255,255,255,20)"   # white/8
+_ROW_BORD = "rgba(255,255,255,15)"   # white/6
+
+# State → text colour
+_STATE_COLOR = {
+    "success":    _GREEN,
+    "error":      "#FF453A",
+    "working":    _ORANGE,
+    "connecting": _ORANGE,
+    "off":        _TEXT60,
+    "waiting":    _TEXT60,
+}
+
+# ── Button stylesheets ────────────────────────────────────────────────────
+_BTN_PRIMARY = f"""
+    QPushButton {{
+        background: {_BLUE}; color: {_TEXT};
+        border: 1px solid {_BLUE};
+        border-radius: 6px;
+        font-family: "{BODY_FONT}"; font-size: 12px; font-weight: 600;
+        padding: 4px 12px;
+    }}
+    QPushButton:hover  {{ background: #007AFF; }}
+    QPushButton:disabled {{ background: rgba(255,255,255,20); color: {_TEXT50}; border-color: transparent; }}
+"""
+_BTN_MUTED = f"""
+    QPushButton {{
+        background: rgba(255,255,255,25); color: {_TEXT};
+        border: 1px solid rgba(255,255,255,25);
+        border-radius: 6px;
+        font-family: "{BODY_FONT}"; font-size: 12px; font-weight: 600;
+        padding: 4px 12px;
+    }}
+    QPushButton:hover {{ background: rgba(255,255,255,50); }}
+    QPushButton:disabled {{ color: {_TEXT50}; }}
+"""
+_BTN_CANCEL = f"""
+    QPushButton {{
+        background: rgba(255,79,58,0.2); color: #FF453A;
+        border: 1px solid rgba(255,79,58,0.3);
+        border-radius: 6px;
+        font-family: "{BODY_FONT}"; font-size: 12px; font-weight: 600;
+        padding: 4px 12px;
+    }}
+    QPushButton:hover {{ background: rgba(255,79,58,0.35); }}
+"""
+_BTN_ICON = f"""
+    QPushButton {{
+        background: transparent; color: {_TEXT50};
+        border: none; border-radius: 6px;
+        font-size: 14px; padding: 3px;
+    }}
+    QPushButton:hover {{ background: rgba(255,255,255,20); color: {_TEXT}; }}
+"""
+_BTN_TRAFFIC = """
+    QPushButton {{
+        background: {color}; border: 1px solid {border};
+        border-radius: 6px; min-width: 12px; max-width: 12px;
+        min-height: 12px; max-height: 12px;
+    }}
+    QPushButton:hover {{ background: {hover}; }}
+"""
 
 
-class MainWindow(ctk.CTkFrame):
+def _traffic_btn(color: str, border: str, hover: str) -> QPushButton:
+    btn = QPushButton()
+    btn.setFixedSize(12, 12)
+    btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {color};
+            border: 1px solid {border};
+            border-radius: 6px;
+        }}
+        QPushButton:hover {{ background: {hover}; }}
+    """)
+    return btn
+
+
+def _row_separator() -> QFrame:
+    sep = QFrame()
+    sep.setFixedHeight(1)
+    sep.setStyleSheet(f"background: {_ROW_BORD}; border: none;")
+    return sep
+
+
+# ── Small helper widgets ───────────────────────────────────────────────────
+class _GlowDot(QWidget):
+    def __init__(self, color: str = "#34C759", size: int = 8, parent=None):
+        super().__init__(parent)
+        s = size + 8
+        self.setFixedSize(s, s)
+        self._c = QColor(color)
+        self._s = size
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx = self.width() / 2; cy = self.height() / 2
+        gc = QColor(self._c); gc.setAlpha(60)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(gc)
+        r = self._s / 2 + 3
+        p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        p.setBrush(self._c)
+        r2 = self._s / 2
+        p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
+
+
+class _PulseDot(QWidget):
+    """Animated pulsing dot for monitor status."""
+
+    def __init__(self, color: str = "#34C759", size: int = 8, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size + 8, size + 8)
+        self._color = QColor(color)
+        self._off_color = QColor("#333333")
+        self._size = size
+        self._on = True
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._active = False
+
+    def set_state(self, state: str):
+        if state == "success":
+            self._color = QColor("#34C759")
+            self._active = True
+            self._timer.start(800)
+        elif state == "working":
+            self._color = QColor("#FFD60A")
+            self._active = True
+            self._timer.start(400)
+        elif state == "error":
+            self._color = QColor("#FF453A")
+            self._active = False
+            self._timer.stop()
+        else:
+            self._active = False
+            self._timer.stop()
+        self.update()
+
+    def _tick(self):
+        self._on = not self._on
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx = self.width() / 2; cy = self.height() / 2
+        c = self._color if (not self._active or self._on) else QColor(self._color.red(), self._color.green(), self._color.blue(), 80)
+        if self._active and self._on:
+            gc = QColor(c); gc.setAlpha(80)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(gc)
+            r = self._size / 2 + 3
+            p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(c if self._active else QColor("#333333"))
+        r2 = self._size / 2
+        p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
+
+
+class _FooterBar(QWidget):
+    """Footer with painted top border."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setPen(QPen(QColor(255, 255, 255, 20), 1))
+        p.drawLine(0, 0, self.width(), 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+class MainWindow(QWidget):
+    """Central widget — matches the new macOS-style frameless design."""
+
     def __init__(self, master_app):
-        super().__init__(master_app)
+        super().__init__()
         self.master_app = master_app
-        self.grid_columnconfigure(0, weight=1);
-        self.grid_columnconfigure(1, weight=1);
-        self.grid_columnconfigure(2, weight=0)
-
-        f_label = (MAIN_FONT_FAMILY, 12)
-        f_btn = (MAIN_FONT_FAMILY, 13, "bold")
-
-        # Top Bar
-        self.top_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.top_frame.grid(row=0, column=0, columnspan=3, padx=10, pady=(5, 0), sticky="ew")
-        self.top_frame.grid_columnconfigure(0, weight=1);
-        self.top_frame.grid_columnconfigure(1, weight=1);
-        self.top_frame.grid_columnconfigure(2, weight=0)
-
-        # Version
-        self.version_frame = ctk.CTkFrame(self.top_frame, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                                          fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR)
-        self.version_frame.grid(row=0, column=0, sticky="ew", padx=(0, 5));
-        self.version_frame.pack_propagate(False)
-
-        self.ver_label = ctk.CTkLabel(self.version_frame, text=VERSION, text_color="#666666", font=f_label,
-                                      cursor="hand2")
-        self.ver_label.place(relx=0.5, rely=0.43, anchor="center")
-        self.ver_label.bind("<Button-1>",
-                            lambda e: webbrowser.open("https://github.com/Shura4eburek/TeleAuto/releases"))
-
-        # Update Status
-        self.update_frame = ctk.CTkFrame(self.top_frame, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                                         fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR)
-        self.update_frame.grid(row=0, column=1, sticky="ew", padx=(5, 5));
-        self.update_frame.pack_propagate(False)
-
-        self.update_inner = ctk.CTkFrame(self.update_frame, fg_color="transparent");
-        self.update_inner.place(relx=0.5, rely=0.43, anchor="center")
-
-        ctk.CTkLabel(self.update_inner, text=tr("update_label"), text_color="#AAAAAA", font=f_label).pack(side="left",
-                                                                                                          padx=(0, 8))
-        self.update_led = LEDCircle(self.update_inner, size=15, fg_color=FRAME_BG);
-        self.update_led.pack(side="left", padx=(0, 8), pady=(4, 0));
-        self.update_led.set_state("success")
-        self.update_label = ctk.CTkLabel(self.update_inner, text=tr("update_actual"), text_color="#666666",
-                                         font=f_label);
-        self.update_label.pack(side="left")
-
-        # Settings Button
-        self.settings_btn = ctk.CTkButton(self.top_frame, text="⚙️", width=35, height=ROW_HEIGHT, fg_color=FRAME_BG,
-                                          border_width=1, border_color=BORDER_COLOR, text_color="#AAA",
-                                          hover_color="#333", command=self.master_app.open_settings_window)
-        self.settings_btn.grid(row=0, column=2, sticky="e", padx=(5, 0))
-
-        # Content
-        self.content_frame = ctk.CTkFrame(self, fg_color="transparent");
-        self.content_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="nsew");
-        self.content_frame.grid_columnconfigure(0, weight=1);
-        self.content_frame.grid_columnconfigure(1, weight=1);
-        self.content_frame.grid_columnconfigure(2, weight=0)
-
-        # Telemart
-        self.telemart_title = TitleBox(self.content_frame, title="Telemart");
-        self.telemart_title.grid(row=0, column=0, padx=(0, 5), pady=8, sticky="ew")
-        self.telemart_status = StatusBox(self.content_frame, text_key="status_waiting");
-        self.telemart_status.grid(row=0, column=1, padx=(5, 5), pady=8, sticky="ew")
-        self.start_telemart_button = ctk.CTkButton(self.content_frame, text=tr("btn_start"), width=125,
-                                                   height=ROW_HEIGHT, corner_radius=CORNER_RADIUS, state="disabled",
-                                                   font=f_btn, command=self.master_app.on_start_telemart_click)
-        self.start_telemart_button.grid(row=0, column=2, padx=(5, 0), pady=8, sticky="e")
-
-        # Pritunl
-        self.pritunl_title = TitleBox(self.content_frame, title="Pritunl");
-        self.pritunl_title.grid(row=1, column=0, padx=(0, 5), pady=8, sticky="ew")
-        self.pritunl_status = StatusBox(self.content_frame, text_key="status_waiting");
-        self.pritunl_status.grid(row=1, column=1, padx=(5, 5), pady=8, sticky="ew")
-        self.pritunl_buttons_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent");
-        self.pritunl_buttons_frame.grid(row=1, column=2, padx=(5, 0), pady=8, sticky="e")
-
-        # Кнопки профилей
-        self.pritunl_btn_1 = ctk.CTkButton(self.pritunl_buttons_frame, text="P1", height=ROW_HEIGHT,
-                                           corner_radius=CORNER_RADIUS, font=f_btn,
-                                           command=lambda: self.master_app.on_pritunl_connect_click(0));
-        self.pritunl_btn_2 = ctk.CTkButton(self.pritunl_buttons_frame, text="P2", height=ROW_HEIGHT,
-                                           corner_radius=CORNER_RADIUS, font=f_btn,
-                                           command=lambda: self.master_app.on_pritunl_connect_click(1));
-        self.pritunl_btn_3 = ctk.CTkButton(self.pritunl_buttons_frame, text="P3", height=ROW_HEIGHT,
-                                           corner_radius=CORNER_RADIUS, font=f_btn,
-                                           command=lambda: self.master_app.on_pritunl_connect_click(2))
-
-        # --- НОВАЯ КНОПКА ОТМЕНЫ PRITUNL (скрыта по умолчанию) ---
-        self.pritunl_cancel_btn = ctk.CTkButton(self.pritunl_buttons_frame, text=tr("btn_cancel"), width=125,
-                                                height=ROW_HEIGHT,
-                                                corner_radius=CORNER_RADIUS, fg_color="#AA0000", hover_color="#880000",
-                                                font=f_btn,
-                                                command=self.master_app.on_cancel_pritunl_click)
-
-        # Monitor
-        self.monitor_title = TitleBox(self.content_frame, title="Monitor");
-        self.monitor_title.grid(row=2, column=0, padx=(0, 5), pady=8, sticky="ew")
-        self.monitor_status = StatusBox(self.content_frame, text_key="status_waiting");
-        self.monitor_status.grid(row=2, column=1, padx=(5, 5), pady=8, sticky="ew")
-        self.disconnect_button = ctk.CTkButton(self.content_frame, text=tr("btn_disconnect"), width=125,
-                                               height=ROW_HEIGHT, corner_radius=CORNER_RADIUS, state="disabled",
-                                               fg_color="grey", font=f_btn, command=self.master_app.on_disconnect_click)
-        self.disconnect_button.grid(row=2, column=2, padx=(5, 0), pady=8, sticky="e")
-
-        # Log
-        self.log_textbox = ctk.CTkTextbox(self, state=ctk.NORMAL, height=200, fg_color="#111", text_color="#CCC",
-                                          font=("Consolas", 12))
         self.is_expanded = False
+        self._telemart_mode = "start"
 
-        # Bottom Status Bar
-        self.bottom_bar = ctk.CTkFrame(self, height=ROW_HEIGHT, fg_color="transparent")
-        self.bottom_bar.grid(row=3, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="ew")
+        # Window background (painted in paintEvent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
 
-        # Left: Internet Status
-        self.net_frame = ctk.CTkFrame(self.bottom_bar, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                                      fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR)
-        self.net_frame.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.net_frame.pack_propagate(False)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self.net_inner = ctk.CTkFrame(self.net_frame, fg_color="transparent")
-        self.net_inner.place(relx=0.5, rely=0.43, anchor="center")
+        root.addWidget(self._build_header())
 
-        ctk.CTkLabel(self.net_inner, text=tr("net_status_label"), text_color="#AAAAAA",
-                     font=(MAIN_FONT_FAMILY, 12)).pack(side="left", padx=(0, 8))
+        # Scrollable content area
+        content = QWidget()
+        content.setStyleSheet("QWidget { background: transparent; }")
+        cl = QVBoxLayout(content)
+        cl.setContentsMargins(16, 16, 16, 16)
+        cl.setSpacing(16)
+        cl.addWidget(self._build_service_group())
+        self._log_frame = self._build_log()
+        self._log_frame.hide()
+        cl.addWidget(self._log_frame, stretch=1)
+        cl.addStretch(0)
+        root.addWidget(content, stretch=1)
 
-        self.net_led = LEDCircle(self.net_inner, size=15, fg_color=FRAME_BG)
-        self.net_led.pack(side="left", pady=(4, 0))
-        self.net_led.set_state("error")
+        root.addWidget(self._build_footer())
 
-        # Right: Ping
-        self.ping_frame = ctk.CTkFrame(self.bottom_bar, height=ROW_HEIGHT, corner_radius=CORNER_RADIUS,
-                                       fg_color=FRAME_BG, border_width=1, border_color=BORDER_COLOR)
-        self.ping_frame.pack(side="right", fill="x", expand=True, padx=(5, 0))
-        self.ping_frame.pack_propagate(False)
+    # ─────────────────────────────────────────── paintEvent (window bg + border)
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Fill rounded rect
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(_WIN_BG))
+        p.drawRoundedRect(QRectF(self.rect()), 12, 12)
+        # Border
+        p.setPen(QPen(QColor(255, 255, 255, 51), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 11.5, 11.5)
 
-        self.ping_inner = ctk.CTkFrame(self.ping_frame, fg_color="transparent")
-        self.ping_inner.place(relx=0.5, rely=0.43, anchor="center")
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
-        ctk.CTkLabel(self.ping_inner, text=tr("net_ping_label"), text_color="#AAAAAA",
-                     font=(MAIN_FONT_FAMILY, 12)).pack(side="left", padx=(0, 5))
+    # ─────────────────────────────────────────── header
+    def _build_header(self) -> QWidget:
+        hdr = DragWidget()
+        hdr.setFixedHeight(52)
+        hdr.setStyleSheet("QWidget { background: transparent; }")
 
-        self.ping_value_label = ctk.CTkLabel(self.ping_inner, text="-- ms", text_color="#666666",
-                                             font=(MAIN_FONT_FAMILY, 12, "bold"))
-        self.ping_value_label.pack(side="left")
+        lay = QHBoxLayout(hdr)
+        lay.setContentsMargins(16, 0, 16, 0)
+        lay.setSpacing(0)
+
+        # Traffic lights
+        tl_wrap = QWidget()
+        tl_wrap.setStyleSheet("QWidget { background: transparent; }")
+        tl = QHBoxLayout(tl_wrap)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(8)
+
+        btn_close = _traffic_btn(_RED_LIGHT, "#E0443E", "#E04040")
+        btn_close.clicked.connect(self.master_app.on_close_btn)
+        btn_min = _traffic_btn(_YLW_LIGHT, "#DEA123", "#DFAE20")
+        btn_min.clicked.connect(self.master_app.showMinimized)
+        btn_max = _traffic_btn(_GRN_LIGHT, "#1AAB29", "#20C030")
+        btn_max.clicked.connect(self.master_app.toggle_maximize)
+        for b in (btn_close, btn_min, btn_max):
+            tl.addWidget(b)
+        lay.addWidget(tl_wrap)
+
+        lay.addStretch()
+
+        # Centered title
+        title = QLabel("TeleAuto")
+        title.setFont(QFont(MAIN_FONT_FAMILY, 13))
+        title.setStyleSheet(f"color: rgba(255,255,255,230); font-weight: 600; border: none; background: transparent;")
+        lay.addWidget(title)
+        lay.addSpacing(6)
+        badge = QLabel(f" {VERSION} ")
+        badge.setFont(QFont(BODY_FONT, 10))
+        badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        badge.setContentsMargins(0, 2, 0, 2)
+        badge.setStyleSheet("""
+            color: rgba(255,255,255,178);
+            background: rgba(255,255,255,25);
+            border: 1px solid rgba(255,255,255,12);
+            border-radius: 4px;
+        """)
+        lay.addWidget(badge, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        lay.addStretch()
+
+        # Right: LED + settings
+        self._status_dot = _GlowDot(_GREEN, 8)
+        lay.addWidget(self._status_dot)
+        lay.addSpacing(10)
+
+        settings_btn = QPushButton("⚙")
+        settings_btn.setFixedSize(26, 26)
+        settings_btn.setStyleSheet(_BTN_ICON)
+        settings_btn.clicked.connect(self.master_app.open_settings_window)
+        lay.addWidget(settings_btn)
+
+        return hdr
+
+    # ─────────────────────────────────────────── service group
+    def _build_service_group(self) -> QWidget:
+        grp = QFrame()
+        grp.setStyleSheet(f"""
+            QFrame#service_group {{
+                background: {_GRP_BG};
+                border: 1px solid {_GRP_BORD};
+                border-radius: 10px;
+            }}
+            QLabel {{ border: none; background: transparent; }}
+        """)
+        grp.setObjectName("service_group")
+
+        lay = QVBoxLayout(grp)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        self._pritunl_row  = self._build_pritunl_row()
+        self._telemart_row = self._build_telemart_row()
+        self._monitor_row  = self._build_monitor_row()
+
+        lay.addWidget(self._pritunl_row)
+        lay.addWidget(_row_separator())
+        lay.addWidget(self._telemart_row)
+        lay.addWidget(_row_separator())
+        lay.addWidget(self._monitor_row)
+
+        return grp
+
+    def _row(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet("QWidget { background: transparent; } QLabel { border: none; background: transparent; }")
+        return w
+
+    def _build_pritunl_row(self) -> QWidget:
+        row = self._row()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setSpacing(12)
+
+        lay.addWidget(GradientIcon("lock"))
+
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        t = QLabel("Pritunl VPN")
+        t.setFont(QFont(BODY_FONT, 14, QFont.Weight.Medium))
+        t.setStyleSheet(f"color: {_TEXT}; border: none; background: transparent;")
+        self._pritunl_status = QLabel(tr("status_waiting"))
+        self._pritunl_status.setFont(QFont(BODY_FONT, 12))
+        self._pritunl_status.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        text.addWidget(t)
+        text.addWidget(self._pritunl_status)
+        lay.addLayout(text)
+        lay.addStretch()
+
+        self.pritunl_connect_btn = QPushButton("Connect")
+        self.pritunl_connect_btn.setStyleSheet(_BTN_PRIMARY)
+        self.pritunl_connect_btn.clicked.connect(self.master_app.on_pritunl_connect_click)
+        lay.addWidget(self.pritunl_connect_btn)
+
+        self.pritunl_cancel_btn = QPushButton(tr("btn_cancel"))
+        self.pritunl_cancel_btn.setStyleSheet(_BTN_CANCEL)
+        self.pritunl_cancel_btn.clicked.connect(self.master_app.on_cancel_pritunl_click)
+        self.pritunl_cancel_btn.hide()
+        lay.addWidget(self.pritunl_cancel_btn)
+
+        self.disconnect_button = QPushButton("Disconnect")
+        self.disconnect_button.setStyleSheet(_BTN_MUTED)
+        self.disconnect_button.clicked.connect(self.master_app.on_disconnect_click)
+        self.disconnect_button.hide()
+        lay.addWidget(self.disconnect_button)
+
+        return row
+
+    def _build_telemart_row(self) -> QWidget:
+        row = self._row()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setSpacing(12)
+
+        lay.addWidget(GradientIcon("monitor"))
+
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        t = QLabel("Telemart App")
+        t.setFont(QFont(BODY_FONT, 14, QFont.Weight.Medium))
+        t.setStyleSheet(f"color: {_TEXT}; border: none; background: transparent;")
+        self._telemart_status = QLabel(tr("status_waiting"))
+        self._telemart_status.setFont(QFont(BODY_FONT, 12))
+        self._telemart_status.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        text.addWidget(t)
+        text.addWidget(self._telemart_status)
+        lay.addLayout(text)
+        lay.addStretch()
+
+        self.start_telemart_button = QPushButton(tr("btn_start"))
+        self.start_telemart_button.setStyleSheet(_BTN_PRIMARY)
+        self.start_telemart_button.clicked.connect(self._on_telemart_btn)
+        lay.addWidget(self.start_telemart_button)
+
+        return row
+
+    def _build_monitor_row(self) -> QWidget:
+        row = self._row()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setSpacing(12)
+
+        lay.addWidget(GradientIcon("activity"))
+
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        t = QLabel("System Monitor")
+        t.setFont(QFont(BODY_FONT, 14, QFont.Weight.Medium))
+        t.setStyleSheet(f"color: {_TEXT}; border: none; background: transparent;")
+        self._monitor_status = QLabel(tr("status_waiting"))
+        self._monitor_status.setFont(QFont(BODY_FONT, 12))
+        self._monitor_status.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        text.addWidget(t)
+        text.addWidget(self._monitor_status)
+        lay.addLayout(text)
+        lay.addStretch()
+
+        self.monitor_led = _PulseDot(_GREEN, 8)
+        lay.addWidget(self.monitor_led)
+        self.monitor_led.set_state("off")
+
+        return row
+
+    # ─────────────────────────────────────────── log
+    def _build_log(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet("QWidget { background: transparent; }")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        hdr_row = QWidget()
+        hdr_row.setStyleSheet("QWidget { background: transparent; }")
+        hr_lay = QHBoxLayout(hdr_row)
+        hr_lay.setContentsMargins(2, 0, 2, 0)
+        hr_lay.setSpacing(6)
+        term_lbl = QLabel("›")
+        term_lbl.setFont(QFont(BODY_FONT, 12))
+        term_lbl.setStyleSheet(f"color: {_TEXT50}; border: none; background: transparent;")
+        hr_lay.addWidget(term_lbl)
+        log_title = QLabel("ACTIVITY LOG")
+        log_title.setFont(QFont(BODY_FONT, 11))
+        log_title.setStyleSheet(f"color: {_TEXT50}; letter-spacing: 1px; font-weight: 600; border: none; background: transparent;")
+        hr_lay.addWidget(log_title)
+        hr_lay.addStretch()
+        lay.addWidget(hdr_row)
+
+        self.log_textbox = QPlainTextEdit()
+        self.log_textbox.setReadOnly(True)
+        self.log_textbox.setFont(QFont("Consolas", 11))
+        self.log_textbox.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background: rgba(0,0,0,102);
+                color: rgba(255,255,255,178);
+                border: 1px solid rgba(255,255,255,13);
+                border-radius: 10px;
+                padding: 10px;
+            }}
+            QScrollBar:vertical {{
+                background: transparent; width: 4px; margin: 4px 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(255,255,255,60); border-radius: 2px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+        lay.addWidget(self.log_textbox)
+        return w
 
     def expand_log(self):
-        if self.is_expanded: return
-        self.is_expanded = True;
-        current_w = self.master_app.winfo_width();
-        self.master_app.geometry(f"{current_w}x600")
-        self.log_textbox.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew");
-        self.grid_rowconfigure(2, weight=1)
-        logger = TextboxLogger(self.log_textbox);
-        sys.stdout = logger;
-        sys.stderr = logger
+        if self.is_expanded:
+            return
+        self.is_expanded = True
+        self._log_frame.show()
+        handler = QtTextHandler(self.log_textbox)
+        logging.getLogger().addHandler(handler)
+        log = logging.getLogger("stdout")
+        sys.stdout = StdoutToLogger(log, logging.INFO)
+        sys.stderr = StdoutToLogger(log, logging.ERROR)
 
-    def update_panel_safe(self, panel_name, state, text_key):
-        title_box, status_box = None, None
-        if panel_name == 'telemart':
-            title_box, status_box = self.telemart_title, self.telemart_status
-        elif panel_name == 'pritunl':
-            title_box, status_box = self.pritunl_title, self.pritunl_status
-        elif panel_name == 'monitor':
-            title_box, status_box = self.monitor_title, self.monitor_status
-        if title_box and status_box:
-            self.after(0, lambda: title_box.set_led(state))
-            self.after(0, lambda: status_box.set_text_key(text_key, state))
+    # ─────────────────────────────────────────── footer
+    def _build_footer(self) -> QWidget:
+        bar = _FooterBar()
+        bar.setFixedHeight(40)
+        bar.setStyleSheet("""
+            QWidget { background: rgba(255,255,255,5); }
+            QLabel  { border: none; background: transparent; }
+        """)
 
-    def update_net_status(self, is_connected, ping_ms):
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(16, 0, 16, 0)
+        lay.setSpacing(8)
+
+        # Internet status
+        self._wifi_icon = WiFiIcon(size=16, color=_TEXT50)
+        lay.addWidget(self._wifi_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        self.net_label = QLabel(tr("net_status_label"))
+        self.net_label.setFont(QFont(BODY_FONT, 11))
+        self.net_label.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        lay.addWidget(self.net_label)
+
+        lay.addStretch()
+
+        # Ping
+        self._ping_icon = ActivityIcon(size=16, color=_TEXT50)
+        lay.addWidget(self._ping_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        ping_prefix = QLabel("Ping:")
+        ping_prefix.setFont(QFont(BODY_FONT, 11))
+        ping_prefix.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        lay.addWidget(ping_prefix)
+        self.ping_value_label = QLabel("-- ms")
+        self.ping_value_label.setFont(QFont(BODY_FONT, 11, QFont.Weight.Bold))
+        self.ping_value_label.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+        lay.addWidget(self.ping_value_label)
+
+        return bar
+
+    # ─────────────────────────────────────────── public API
+    def after(self, ms: int, callback):
+        QTimer.singleShot(ms, callback)
+
+    def update_panel_safe(self, panel_name: str, state: str, text_key: str):
+        color = _STATE_COLOR.get(state, _TEXT60)
+        text = tr(text_key)
+        ss = f"color: {color}; border: none; background: transparent;"
+
+        def _apply():
+            if panel_name == "pritunl":
+                self._pritunl_status.setText(text)
+                self._pritunl_status.setStyleSheet(ss)
+            elif panel_name == "telemart":
+                self._telemart_status.setText(text)
+                self._telemart_status.setStyleSheet(ss)
+            elif panel_name == "monitor":
+                self._monitor_status.setText(text)
+                self._monitor_status.setStyleSheet(ss)
+                self.monitor_led.set_state(state)
+
+        QTimer.singleShot(0, _apply)
+
+    def update_net_status(self, is_connected: bool, ping_ms):
         if is_connected:
-            self.net_led.set_state("success")
-            self.ping_value_label.configure(text=f"{ping_ms} ms", text_color="#E0E0E0")
+            self._wifi_icon.set_color(_GREEN)
+            self.net_label.setText("Internet Connected")
+            self.net_label.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+            self.ping_value_label.setText(f"{ping_ms} ms")
+            self.ping_value_label.setStyleSheet(f"color: {_TEXT}; border: none; background: transparent;")
+            self._ping_icon.set_color(_TEXT)
         else:
-            self.net_led.set_state("error")
-            self.ping_value_label.configure(text="-- ms", text_color="#666666")
+            self._wifi_icon.set_color(_TEXT50)
+            self.net_label.setText(tr("net_status_label"))
+            self.net_label.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+            self.ping_value_label.setText("-- ms")
+            self.ping_value_label.setStyleSheet(f"color: {_TEXT60}; border: none; background: transparent;")
+            self._ping_icon.set_color(_TEXT50)
 
-    def show_update_ready(self, version_tag):
-        self.update_led.set_state("working")
-        self.update_label.destroy()
-        self.update_btn = ctk.CTkButton(self.update_inner, text=f"🔄 {version_tag}", width=80, height=20,
-                                        fg_color="#228B22", hover_color="#006400",
-                                        font=(MAIN_FONT_FAMILY, 11, "bold"),
-                                        command=self.master_app.install_update_now)
-        self.update_btn.pack(side="left")
+    def show_update_ready(self, version_tag: str):
+        self._status_dot.hide()
+        btn = QPushButton(f"↑ {version_tag}")
+        btn.setFixedHeight(20)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(52,199,89,0.15); color: #34C759;
+                border: 1px solid rgba(52,199,89,0.3); border-radius: 10px;
+                font-size: 11px; font-weight: bold; padding: 0 8px;
+            }
+            QPushButton:hover { background: rgba(52,199,89,0.25); }
+        """)
+        btn.clicked.connect(self.master_app.install_update_now)
+        # Insert before spacer in header
+        header = self.layout().itemAt(0).widget()
+        header.layout().insertWidget(header.layout().count() - 2, btn)
 
-    # --- НОВЫЕ МЕТОДЫ УПРАВЛЕНИЯ КНОПКАМИ ---
-    def toggle_pritunl_ui(self, state):
-        """state: 'working' (показать Cancel) или 'normal' (вернуть как было)"""
-        if state == 'working':
-            self.pritunl_btn_1.pack_forget()
-            self.pritunl_btn_2.pack_forget()
-            self.pritunl_btn_3.pack_forget()
-            self.pritunl_cancel_btn.pack(side="left", padx=0)
+    def toggle_pritunl_ui(self, state: str):
+        if state == "working":
+            self.pritunl_connect_btn.hide()
+            self.disconnect_button.hide()
+            self.pritunl_cancel_btn.show()
         else:
-            self.pritunl_cancel_btn.pack_forget()
-            # Кнопки P1-P3 восстановятся через update_main_window_buttons в App
+            self.pritunl_cancel_btn.hide()
+            self.disconnect_button.hide()
+            self.pritunl_connect_btn.show()
 
-    def toggle_telemart_ui(self, state):
-        if state == 'working':
-            self.start_telemart_button.configure(text=tr("btn_cancel"), fg_color="#AA0000", hover_color="#880000",
-                                                 state="normal", command=self.master_app.on_cancel_telemart_click)
+    def toggle_telemart_ui(self, state: str):
+        if state == "working":
+            self._telemart_mode = "cancel"
+            self.start_telemart_button.setText(tr("btn_cancel"))
+            self.start_telemart_button.setStyleSheet(_BTN_CANCEL)
         else:
-            self.start_telemart_button.configure(text=tr("btn_start"), fg_color=["#3B8ED0", "#1F6AA5"],
-                                                 hover_color=["#36719F", "#144870"],
-                                                 command=self.master_app.on_start_telemart_click)
+            self._telemart_mode = "start"
+            self.start_telemart_button.setText(tr("btn_start"))
+            self.start_telemart_button.setStyleSheet(_BTN_PRIMARY)
+        self.start_telemart_button.setEnabled(True)
+
+    def _on_telemart_btn(self):
+        if self._telemart_mode == "start":
+            self.master_app.on_start_telemart_click()
+        else:
+            self.master_app.on_cancel_telemart_click()

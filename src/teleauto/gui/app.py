@@ -1,300 +1,321 @@
 # src/teleauto/gui/app.py
-import sys
 import os
-import threading
-import time
-import customtkinter as ctk
-from tkinter import messagebox
+import sys
+import logging
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QApplication, QMessageBox, QSystemTrayIcon, QMenu,
+)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
 
-from src.teleauto.credentials import load_credentials, decrypt_credentials
 from src.teleauto.localization import tr, set_language
-from src.teleauto.login.login import login_telemart, start_telemart
-from src.teleauto.vpn import vpn
-from src.teleauto.vpn.vpn_monitor_simple import SimpleVPNMonitor
-from src.teleauto.network.network_utils import wait_for_internet, check_internet_ping
-from src.teleauto.authenticator.totp_client import check_time_drift, get_current_totp
-
-from src.teleauto.gui.windows import ConfigWindow, PinWindow, SettingsWindow
+from src.teleauto.controller import AppController
+from src.teleauto.gui.windows import ConfigDialog, PinDialog, SettingsDialog, UpdateDialog
 from src.teleauto.gui.main_view import MainWindow
-from src.teleauto.gui.utils import apply_window_settings
-from src.teleauto.gui.constants import ROW_HEIGHT
-
-from src.teleauto.gui.fonts import load_custom_font
-from src.teleauto.updater import check_and_download, schedule_update_on_exit
+from src.teleauto.gui.utils import apply_window_settings, apply_dark_title_bar
 from src.teleauto.gui.constants import VERSION
 
+logger = logging.getLogger(__name__)
 
-class App(ctk.CTk):
+
+class App(QMainWindow):
     def __init__(self):
-        load_custom_font("Unbounded-VariableFont_wght.ttf")
         super().__init__()
+        self.ctrl = AppController(ui=self)
+        self.main_frame: MainWindow | None = None
+        self._tray_icon: QSystemTrayIcon | None = None
 
-        self.creds = load_credentials()
-        # БЕЗОПАСНОСТЬ: Храним только PIN, а не расшифрованные данные
-        self.user_pin = None
+        if self.ctrl.creds:
+            set_language(self.ctrl.creds.get("language", "ru"))
 
-        self.monitor_instance = None
-        self.main_frame = None
-        self.vpn_is_connected = False
-        self.update_ready = False
-        self.new_version_tag = None
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setWindowTitle("TeleAuto")
+        self.setMinimumSize(400, 300)
+        self.resize(550, 280)
+        self.setWindowIcon(self._make_icon())
 
-        self.pritunl_cancel_event = threading.Event()
-        self.telemart_cancel_event = threading.Event()
+        central = QWidget()
+        central.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setCentralWidget(central)
 
-        threading.Thread(target=self.bg_update_check, daemon=True).start()
+        # Start background tasks (update check, network monitor)
+        self.ctrl.start_background_tasks()
 
-        if self.creds:
-            set_language(self.creds.get("language", "ru"))
+        # Defer startup flow to after event loop starts
+        QTimer.singleShot(0, self._startup_flow)
 
-        self.title("TeleAuto")
-        self.geometry("550x280")
-        self.resizable(False, False)
-        self.after(10, lambda: apply_window_settings(self))
-
-        if not self.creds:
-            self.withdraw()
-            ConfigWindow(self)
-        else:
-            if self.creds.get("pin_hash"):
-                self.withdraw()
-                PinWindow(self)
+    # ------------------------------------------------------------------ startup
+    def _startup_flow(self):
+        if not self.ctrl.creds:
+            dlg = ConfigDialog(self)
+            if dlg.exec() != dlg.DialogCode.Accepted:
+                self.on_closing()
+                return
+            self.ctrl.load_creds()
+            if dlg.pin_used:
+                self._show_pin_dialog()
             else:
-                # Если пина нет, просто запускаем интерфейс
-                self.show_main_window()
-
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        self.net_monitor_running = True
-        threading.Thread(target=self.network_monitor_loop, daemon=True).start()
-
-    def config_saved(self, pin_used):
-        self.creds = load_credentials()
-        if pin_used:
-            PinWindow(self)
+                self._do_show_main()
         else:
-            self.show_main_window()
+            if self.ctrl.creds.get("pin_hash"):
+                self._show_pin_dialog()
+            else:
+                self._do_show_main()
 
-    def pin_unlocked(self, pin):
-        self.user_pin = pin
+    def _show_pin_dialog(self):
+        dlg = PinDialog(self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            self.on_closing()
+            return
         try:
-            # Теперь temp_data[4] гарантированно будет языком
-            temp_data = decrypt_credentials(self.creds, pin)
-            set_language(temp_data[4])
-            del temp_data
-            self.show_main_window()
+            self.ctrl.decrypt_and_set_language(dlg.pin)
+            self._do_show_main()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-            self.quit()
+            QMessageBox.critical(self, "Error", str(e))
+            self.on_closing()
 
+    def _do_show_main(self):
+        self.show_main_window()
+
+    # ------------------------------------------------------------------ main window
     def show_main_window(self):
-        self.deiconify()
         self.main_frame = MainWindow(self)
-        self.main_frame.pack(fill="both", expand=True)
+        self.setCentralWidget(self.main_frame)
+        self.resize(650, 580)
+        self.setMinimumSize(500, 480)
+        self.setResizable(True)
+        self.show()
+
         self.main_frame.expand_log()
-        self.geometry("650x600")
-        self.resizable(True, True)
-        self.update_main_window_buttons()
-        print(tr("log_system_start"))
+        self._update_buttons_impl()
+        logger.info(tr("log_system_start"))
         self.on_disconnect_click(startup=True)
-        if self.update_ready and self.new_version_tag:
-            self.main_frame.show_update_ready(self.new_version_tag)
 
-    def update_main_window_buttons(self, is_busy=False):
-        if not self.main_frame: return
-        self.main_frame.toggle_pritunl_ui('normal')
+        if self.ctrl.update_ready and self.ctrl.new_version_tag:
+            QTimer.singleShot(400, lambda: self._show_update_dialog(self.ctrl.new_version_tag))
 
-        # Для отрисовки кнопок расшифровываем наличие секретов "на лету"
+        self._setup_tray()
+        self._add_dropshadow()
+
+    def setResizable(self, resizable: bool):
+        if resizable:
+            self.setMinimumSize(500, 480)
+            self.setMaximumSize(16777215, 16777215)
+        else:
+            fixed = self.size()
+            self.setFixedSize(fixed)
+
+    def on_close_btn(self):
+        if self._tray_icon and self._tray_icon.isVisible():
+            self.hide()
+        else:
+            self.on_closing()
+
+    def toggle_maximize(self):
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def _add_dropshadow(self):
+        """Windows DWM drop-shadow for frameless window."""
         try:
-            data = decrypt_credentials(self.creds, self.user_pin)
-            secrets = data[2]
-            active = [i for i, s in enumerate(secrets) if s]
-            del data  # Удаляем расшифрованные данные сразу после проверки
-        except:
-            active = []
+            import ctypes
+            hwnd = int(self.winId())
+            DWMWA_NCRENDERING_POLICY = 2
+            DWMNCRP_ENABLED = 2
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_NCRENDERING_POLICY,
+                ctypes.byref(ctypes.c_int(DWMNCRP_ENABLED)), ctypes.sizeof(ctypes.c_int)
+            )
+            margins = (ctypes.c_int * 4)(1, 1, 1, 1)
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)
+        except Exception as e:
+            logger.debug("DWM shadow failed: %s", e)
 
-        buttons = [self.main_frame.pritunl_btn_1, self.main_frame.pritunl_btn_2, self.main_frame.pritunl_btn_3]
-        count = len(active)
-        total = 125
-        spacing = 5
-        w = (total - (count - 1) * spacing) // count if count > 0 else 0
+    # ------------------------------------------------------------------ compat: after()
+    def after(self, ms: int, callback):
+        """Tkinter-compatible after() → QTimer.singleShot for controller compat."""
+        QTimer.singleShot(ms, callback)
 
-        for btn in buttons: btn.pack_forget()
-        for i, btn in enumerate(buttons):
-            if i in active:
-                px = (0, 0) if (i == active[-1]) else (0, spacing)
-                btn.configure(width=w, height=ROW_HEIGHT)
-                btn.pack(side="left", padx=px)
-                btn.configure(state="disabled" if (is_busy or self.vpn_is_connected) else "normal")
+    # ------------------------------------------------------------------ buttons
+    def update_main_window_buttons(self, is_busy: bool = False):
+        """Thread-safe: always schedule on main thread."""
+        QTimer.singleShot(0, lambda: self._update_buttons_impl(is_busy))
+
+    def _update_buttons_impl(self, is_busy: bool = False):
+        if not self.main_frame:
+            return
+        if is_busy:
+            pass  # caller already set toggle_pritunl_ui('working')
+        elif self.ctrl.vpn_is_connected:
+            self.main_frame.pritunl_connect_btn.hide()
+            self.main_frame.pritunl_cancel_btn.hide()
+            self.main_frame.disconnect_button.show()
+        else:
+            self.main_frame.toggle_pritunl_ui("normal")
 
         if not is_busy:
-            self.main_frame.toggle_telemart_ui('normal')
+            self.main_frame.toggle_telemart_ui("normal")
 
-        state = "disabled" if is_busy else ("normal" if self.vpn_is_connected else "disabled")
-        self.main_frame.start_telemart_button.configure(state=state)
-        self.main_frame.disconnect_button.configure(state=state)
+        self.main_frame.start_telemart_button.setEnabled(not is_busy)
 
-    def run_pritunl(self, idx):
-        try:
-            self.set_ui_status("pritunl", "waiting", "status_working")
-            if not wait_for_internet(cancel_event=self.pritunl_cancel_event):
-                self.set_ui_status("pritunl", "error",
-                                   "status_no_net" if not self.pritunl_cancel_event.is_set() else "status_cancelled")
-                self.update_main_window_buttons()
-                return
-
-            # Расшифровываем секрет только для текущей попытки подключения
-            data = decrypt_credentials(self.creds, self.user_pin)
-            secret = data[2][idx]
-
-            attempt = 0
-            while attempt < 5 and not self.vpn_is_connected:
-                if self.pritunl_cancel_event.is_set(): break
-                if attempt > 0: vpn.force_kill_pritunl()
-
-                attempt += 1
-                self.set_ui_status("pritunl", "working", "status_working")
-                vpn.start_pritunl()
-
-                if not vpn.click_pritunl_connect(profile_index=idx): continue
-
-                ok, ntp = check_time_drift()
-                totp = get_current_totp(secret, ntp_time=ntp)
-
-                if vpn.input_2fa_code_and_reconnect(totp):
-                    # Ожидание стабилизации соединения
-                    for _ in range(10):
-                        if vpn.check_vpn_connection():
-                            self.vpn_is_connected = True
-                            break
-                        time.sleep(1)
-
-            # ОЧИСТКА: Удаляем расшифрованный секрет из памяти
-            del secret, data
-
-            if self.vpn_is_connected:
-                self.set_ui_status("pritunl", "success", "status_active")
-                # Для монитора передаем секрет (он будет храниться там локально)
-                data_for_mon = decrypt_credentials(self.creds, self.user_pin)
-                self.start_monitor(idx, data_for_mon[2][idx])
-                del data_for_mon
-            else:
-                self.set_ui_status("pritunl", "error", "status_error")
-
-            self.update_main_window_buttons()
-        except Exception as e:
-            print(f"Pritunl error: {e}")
-            self.update_main_window_buttons()
-
-    def run_telemart(self):
-        try:
-            if not self.vpn_is_connected: return
-
-            # Расшифровываем данные Telemart ТОЛЬКО перед вводом
-            data = decrypt_credentials(self.creds, self.user_pin)
-            u, p, _, _, _, tm_path = data
-
-            if not tm_path or not os.path.exists(tm_path):
-                self.after(0, lambda: messagebox.showerror("Error", tr("error_no_tm_path")))
-                return
-
-            self.set_ui_status("telemart", "working", "status_working")
-            start_telemart(tm_path)
-
-            # Эмуляция ожидания окна (как в исходном коде)
-            time.sleep(5)
-
-            if login_telemart(u, p):
-                self.set_ui_status("telemart", "success", "status_success")
-            else:
-                self.set_ui_status("telemart", "error", "status_error")
-
-            # ОЧИСТКА: Стираем пароли из локальных переменных
-            del u, p, data
-        except Exception as e:
-            print(f"Telemart error: {e}")
-            self.set_ui_status("telemart", "error", "status_error")
-        finally:
-            self.update_main_window_buttons()
-
-    def set_ui_status(self, target, state, text_key):
-        if self.main_frame: self.main_frame.update_panel_safe(target, state, text_key)
-
-    def open_settings_window(self):
-        SettingsWindow(self)
-
-    def network_monitor_loop(self):
-        while self.net_monitor_running:
-            try:
-                connected, ping = check_internet_ping()
-                if self.main_frame:
-                    self.main_frame.after(0, lambda c=connected, p=ping: self.main_frame.update_net_status(c, p))
-            except:
-                pass
-            time.sleep(3)
-
-    def on_pritunl_connect_click(self, idx):
-        if not self.main_frame.is_expanded: self.main_frame.expand_log()
-        self.pritunl_cancel_event.clear()
-        self.main_frame.toggle_pritunl_ui('working')
-        threading.Thread(target=self.run_pritunl, args=(idx,), daemon=True).start()
-
-    def on_start_telemart_click(self):
-        if not self.main_frame.is_expanded: self.main_frame.expand_log()
-        self.telemart_cancel_event.clear()
-        self.main_frame.toggle_telemart_ui('working')
-        threading.Thread(target=self.run_telemart, daemon=True).start()
+    # ------------------------------------------------------------------ VPN
+    def on_pritunl_connect_click(self):
+        if not self.main_frame.is_expanded:
+            self.main_frame.expand_log()
+        self.main_frame.toggle_pritunl_ui("working")
+        self.update_main_window_buttons(is_busy=True)
+        self.ctrl.start_autopilot()
 
     def on_cancel_pritunl_click(self):
-        """Обработчик нажатия кнопки отмены во время подключения VPN"""
-        self.pritunl_cancel_event.set()
-        print(tr("log_op_cancelled"))
+        self.ctrl.stop_autopilot()
+        logger.info(tr("log_op_cancelled"))
+
+    def on_disconnect_click(self, startup: bool = False):
+        if not startup:
+            logger.info(tr("log_ctrl_stopping"))
+        self.ctrl.stop_autopilot()
+        if not startup and self.main_frame:
+            self.main_frame.disconnect_button.setEnabled(False)
+
+    # ------------------------------------------------------------------ Telemart
+    def on_start_telemart_click(self):
+        if not self.main_frame.is_expanded:
+            self.main_frame.expand_log()
+        self.main_frame.toggle_telemart_ui("working")
+        self.ctrl.start_telemart()
 
     def on_cancel_telemart_click(self):
-        """Обработчик нажатия кнопки отмены во время логина в Telemart"""
-        self.telemart_cancel_event.set()
-        print(tr("log_op_cancelled"))
+        self.ctrl.stop_telemart()
+        logger.info(tr("log_op_cancelled"))
 
-    def on_disconnect_click(self, startup=False):
-        self.update_main_window_buttons(is_busy=True)
-        threading.Thread(target=self.run_disconnect, args=(startup,), daemon=True).start()
+    # ------------------------------------------------------------------ status
+    def set_ui_status(self, target: str, state: str, text_key: str):
+        if self.main_frame:
+            self.main_frame.update_panel_safe(target, state, text_key)
 
-    def run_disconnect(self, startup=False):
+    # ------------------------------------------------------------------ settings
+    def open_settings_window(self):
+        dlg = SettingsDialog(self)
+        dlg.exec()
+
+    # ------------------------------------------------------------------ update
+    def on_update_found(self, tag: str):
+        """Called from controller via self.ui.after(0, ...)."""
+        if self.main_frame:
+            self._show_update_dialog(tag)
+
+    def _show_update_dialog(self, tag: str):
+        UpdateDialog(self, tag, on_now=self._do_update_now, on_later=self._do_update_later)
+
+    def _do_update_now(self, dialog: UpdateDialog):
+        dialog.disable_buttons()
+        dialog.set_status(tr("update_downloading"))
+
+        def _worker():
+            success = self.ctrl.do_download_and_apply()
+            if success:
+                QTimer.singleShot(0, lambda: dialog.set_status(tr("update_applying"), color="#00CC44"))
+                QTimer.singleShot(800, self.on_closing)
+            else:
+                QTimer.singleShot(0, lambda: dialog.set_status(tr("update_failed"), color="#FF4444"))
+                QTimer.singleShot(0, lambda: dialog._later_btn.setEnabled(True))
+
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _do_update_later(self):
+        if self.main_frame and self.ctrl.new_version_tag:
+            self.main_frame.show_update_ready(self.ctrl.new_version_tag)
+
+    def install_update_now(self):
+        if self.ctrl.new_version_tag:
+            self._show_update_dialog(self.ctrl.new_version_tag)
+
+    # ------------------------------------------------------------------ tray
+    def _setup_tray(self):
         try:
-            if self.monitor_instance: self.monitor_instance.stop(); self.monitor_instance = None
-            if vpn.check_vpn_connection(): vpn.disconnect_vpn(); vpn.wait_for_disconnect()
-            self.vpn_is_connected = False
-        finally:
-            self.set_ui_status("pritunl", "off", "status_off")
-            self.update_main_window_buttons(is_busy=False)
+            icon = self._make_icon()
+            self._tray_icon = QSystemTrayIcon(icon, self)
 
-    def start_monitor(self, idx, secret):
-        m = SimpleVPNMonitor(pin_code=self.user_pin, secret_2fa=secret, profile_index=idx)
-        if m.start():
-            self.set_ui_status("monitor", "success", "status_active")
-            self.monitor_instance = m
+            menu = QMenu()
+            show_act = QAction(tr("tray_show"), self)
+            show_act.triggered.connect(self._show_from_tray)
+            quit_act = QAction(tr("tray_quit"), self)
+            quit_act.triggered.connect(self.on_closing)
+            menu.addAction(show_act)
+            menu.addSeparator()
+            menu.addAction(quit_act)
+            menu.setStyleSheet("""
+                QMenu {
+                    background: #2C2C2E; color: #FFFFFF;
+                    border: 1px solid #3A3A3C; border-radius: 8px; padding: 4px;
+                }
+                QMenu::item { padding: 6px 16px; border-radius: 4px; }
+                QMenu::item:selected { background: #0A84FF; }
+                QMenu::separator { background: #3A3A3C; height: 1px; margin: 4px 8px; }
+            """)
 
-    def bg_update_check(self):
+            self._tray_icon.setContextMenu(menu)
+            self._tray_icon.setToolTip(f"TeleAuto {VERSION}")
+            self._tray_icon.activated.connect(self._on_tray_activated)
+            self._tray_icon.show()
+        except Exception as e:
+            logger.warning("Tray setup failed: %s", e)
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._show_from_tray()
+
+    def _show_from_tray(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _make_icon(self) -> QIcon:
+        path = self._get_icon_path()
+        if path:
+            return QIcon(path)
+        # Fallback: blue circle
+        px = QPixmap(64, 64)
+        px.fill(Qt.GlobalColor.transparent)
+        p = QPainter(px)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(QColor(30, 144, 255))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(4, 4, 56, 56)
+        p.end()
+        return QIcon(px)
+
+    @staticmethod
+    def _get_icon_path() -> str | None:
         try:
-            downloaded, tag = check_and_download(VERSION)
-            if downloaded:
-                self.update_ready = True
-                self.new_version_tag = tag
-                if self.main_frame: self.main_frame.after(0, lambda: self.main_frame.show_update_ready(tag))
-        except:
+            path = os.path.join(sys._MEIPASS, "icon.ico")
+            return path if os.path.exists(path) else None
+        except AttributeError:
             pass
+        here = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+        path = os.path.join(root, "icon.ico")
+        return path if os.path.exists(path) else None
+
+    # ------------------------------------------------------------------ close
+    def closeEvent(self, event):
+        if self._tray_icon and self._tray_icon.isVisible():
+            self.hide()
+            event.ignore()
+        else:
+            self.on_closing()
+            event.accept()
 
     def on_closing(self):
-        self.net_monitor_running = False
-        if self.monitor_instance: self.monitor_instance.stop()
-        self.quit()
-
-
-if __name__ == "__main__":
-    ctk.set_appearance_mode("Dark")
-    ctk.set_default_color_theme("blue")
-    App().mainloop()
+        if self._tray_icon:
+            try:
+                self._tray_icon.hide()
+            except Exception:
+                pass
+        self.ctrl.shutdown()
+        QApplication.quit()
