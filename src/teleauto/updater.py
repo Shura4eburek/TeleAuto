@@ -139,10 +139,14 @@ def apply_update(new_exe_path):
         proc_name = os.path.splitext(os.path.basename(current_exe))[0]
         ps_path = os.path.join(os.path.dirname(current_exe), "updater.ps1")
 
+        # Escape single quotes for PowerShell string literals
+        def ps_escape(s: str) -> str:
+            return s.replace("'", "''")
+
         ps_script = (
-            f"$old = '{current_exe}'\n"
-            f"$new = '{new_exe_abs}'\n"
-            f"$name = '{proc_name}'\n"
+            f"$old = '{ps_escape(current_exe)}'\n"
+            f"$new = '{ps_escape(new_exe_abs)}'\n"
+            f"$name = '{ps_escape(proc_name)}'\n"
             "\n"
             "# Wait for the app to exit\n"
             "do {\n"

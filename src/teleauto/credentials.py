@@ -101,7 +101,7 @@ def decrypt_field(encrypted_data: str, key: bytes) -> str:
         unpadder = padding.PKCS7(128).unpadder()
         data = unpadder.update(padded_data) + unpadder.finalize()
         return data.decode()
-    except:
+    except Exception:
         return ""
 
     # --- ОБНОВЛЕННАЯ ЛОГИКА ---
@@ -109,46 +109,35 @@ def decrypt_field(encrypted_data: str, key: bytes) -> str:
 
 def save_credentials(username, password, pin, secrets_dict, start_telemart_flag=False, language="ru", telemart_path="",
                      manual_offset=0):
-    """
-    Добавлен аргумент manual_offset (int)
-    """
+    if not pin:
+        raise ValueError("PIN is required — credentials are not saved without encryption.")
+
     base_data = {
         "start_telemart": start_telemart_flag,
         "language": language,
-        "manual_offset": manual_offset  # Сохраняем в открытом виде (это не секрет)
+        "manual_offset": manual_offset,
     }
 
-    if pin:
-        salt = os.urandom(16)
-        key = derive_key(pin, salt)
+    salt = os.urandom(16)
+    key = derive_key(pin, salt)
 
-        try:
-            encrypted_secrets = {}
-            for name, secret in secrets_dict.items():
-                if secret.strip():
-                    encrypted_secrets[name] = encrypt_field(secret.strip(), key)
+    try:
+        encrypted_secrets = {}
+        for name, secret in secrets_dict.items():
+            if secret.strip():
+                encrypted_secrets[name] = encrypt_field(secret.strip(), key)
 
-            data = {
-                **base_data,
-                "username": encrypt_field(username, key),
-                "password": encrypt_field(password, key),
-                "secrets": encrypted_secrets,
-                "telemart_path": encrypt_field(telemart_path, key),
-                "pin_hash": hash_password(pin).decode(),
-                "salt": base64.b64encode(salt).decode(),
-            }
-        finally:
-            secure_zero(key)
-    else:
         data = {
             **base_data,
-            "username": username,
-            "password": password,
-            "secrets": secrets_dict,
-            "telemart_path": telemart_path,
-            "pin_hash": None,
-            "salt": None,
+            "username": encrypt_field(username, key),
+            "password": encrypt_field(password, key),
+            "secrets": encrypted_secrets,
+            "telemart_path": encrypt_field(telemart_path, key),
+            "pin_hash": hash_password(pin).decode(),
+            "salt": base64.b64encode(salt).decode(),
         }
+    finally:
+        secure_zero(key)
 
     with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
@@ -160,7 +149,7 @@ def load_credentials():
     try:
         with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
+    except Exception:
         return None
 
 
