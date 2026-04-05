@@ -5,6 +5,52 @@ import types
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# ---------------------------------------------------------------------------
+# Dependency check (source-only, skipped in PyInstaller bundle)
+# ---------------------------------------------------------------------------
+def _ensure_dependencies():
+    if getattr(sys, "frozen", False):
+        return  # running as .exe — all deps are bundled
+
+    import importlib
+    import subprocess
+
+    # package_name -> import_name (when they differ)
+    DEPS = {
+        "pywebview":    "webview",
+        "pyotp":        "pyotp",
+        "pywinauto":    "pywinauto",
+        "bcrypt":       "bcrypt",
+        "cryptography": "cryptography",
+        "argon2-cffi":  "argon2",
+        "ntplib":       "ntplib",
+        "psutil":       "psutil",
+        "pywin32":      "win32api",
+        "requests":     "requests",
+        "packaging":    "packaging",
+        "pillow":       "PIL",
+        "pystray":      "pystray",
+    }
+
+    missing = []
+    for pkg, mod in DEPS.items():
+        try:
+            importlib.import_module(mod)
+        except ImportError:
+            missing.append(pkg)
+
+    if missing:
+        print(f"[TeleAuto] Installing missing packages: {', '.join(missing)}")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet", *missing],
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        print("[TeleAuto] Done. Restarting...")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+_ensure_dependencies()
+
 # Hidden imports for PyInstaller
 import bcrypt
 import _cffi_backend  # bcrypt depends on this
