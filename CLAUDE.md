@@ -4,24 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TeleAuto is a Windows-only desktop automation tool (Python 3.11) that provides:
+TeleAuto is a Windows-only desktop automation tool (Python 3.11 + React) that provides:
 1. **Pritunl VPN autopilot** — manages VPN connections via `pritunl-client.exe` CLI, handles TOTP 2FA with NTP time sync, auto-reconnects
 2. **Telemart client auto-login** — launches `Telemart.Client.exe` and performs UI-automated login via pywinauto
 
 GitHub: `https://github.com/Shura4eburek/TeleAuto`
 
+## Setup (fresh clone)
+
+### Python
+```bash
+pip install -r requirements.txt
+```
+
+### Frontend (React)
+```bash
+cd design
+npm install
+npm run build   # produces design/dist/ — required for launcher.py and PyInstaller
+cd ..
+```
+
+### Runtime files (create manually, not in git)
+- `profiles/` — place `.ovpn` files here for VPN profiles
+- `credentials.json` — created automatically on first run
+
 ## Commands
 
 ```bash
-# Run from source
+# Run from source (auto-installs missing pip packages on first run)
 python launcher.py
 
-# Build standalone exe (requires TeleAuto.spec)
+# Build standalone exe
 pyinstaller TeleAuto.spec
-```
 
-```bash
-# Lint
+# Frontend dev server (hot reload, no Python backend)
+cd design && npm run dev
+
+# Lint Python
 ruff check src/
 ```
 
@@ -29,48 +49,98 @@ There are no test commands configured.
 
 ## Architecture
 
-**Entry point:** `launcher.py` → sets customtkinter dark theme → `App().mainloop()`
+### Frontend — `design/`
+React + TypeScript + Vite + Tailwind + framer-motion.
 
-**Core orchestrator:** `src/teleauto/gui/app.py` — `App(ctk.CTk)` manages the full lifecycle:
-- First-run: `ConfigWindow` → credentials setup
-- PIN-protected: `PinWindow` → decrypt credentials → `MainView`
-- Spawns daemon threads for VPN autopilot, Telemart login, network monitoring, update checking
+- `design/src/App.tsx` — single-file SPA: all views (Config, Pin, Main, Shutdown), state management, pywebview JS API calls via `window.pywebview.api.*`
+- `design/src/i18n.ts` — all UI strings for ua/ru/en. **Single source of truth for frontend translations.** Add keys here when adding new UI text.
+- `design/src/index.css` — global styles, scrollbar suppression
+- `design/dist/` — built output (gitignored, regenerate with `npm run build`)
 
-**Business logic layer:** `src/teleauto/controller.py` — `AppController` owns all non-UI state and background tasks. `App` holds a reference to it and passes itself as `ui`. Communication pattern: controller calls `self.ui.after(0, callback)` or `self.ui.main_frame.after(0, callback)` for all UI updates. Uses `ThreadPoolExecutor(max_workers=4)` internally — don't spawn raw threads from `App`.
+**View transitions:** framer-motion `AnimatePresence` with opacity-only fade (no transforms — transforms cause WebView2 scrollbar flash).
 
-**Threading pattern:** All background work goes through `AppController.submit(fn)`. UI updates dispatch back to main thread via `widget.after(0, lambda: ...)`.
+### Python bridge — `src/teleauto/webapi.py`
+`App` class exposed to JS via `js_api=app` in `webview.create_window()`.
+- All public methods are callable from JS as `window.pywebview.api.method_name()`
+- Push events to frontend via `self._push({"type": "...", ...})` → JS receives via `window.__pushEvent`
+- `update_net_status(connected, ping)` → pushes `net_status` event
+- `get_initial_state()` → called on window load to hydrate frontend state
+- `save_config()` — validates PIN (required, min 4 chars, must match), saves credentials
+- `save_settings()` — handles settings updates including PIN change
+- `open_url(url)` — only allows `https://` URLs (security constraint)
 
-**Key modules:**
-- `src/teleauto/vpn/pritunl_auto.py` — `PritunlAutopilot`: subprocess calls to `pritunl-client.exe list/start/stop`, TOTP generation, connection monitoring (5s interval), auto-import of `.ovpn` profiles
+### Entry point — `launcher.py`
+1. Checks and installs missing pip packages (source mode only, skipped in `.exe`)
+2. Injects tkinter shim (controller.py uses `messagebox` — redirected to logger)
+3. Creates `webview.create_window()` with `js_api=App()`
+4. On window load: calls `app.get_initial_state()` and pushes `init` event
+
+### Business logic — `src/teleauto/controller.py`
+`AppController` owns all non-UI state and background threads.
+- `App` (webapi.py) holds a reference as `self.ctrl`
+- Threading: `ThreadPoolExecutor(max_workers=4)` via `AppController.submit(fn)`
+- UI updates: controller calls `self.ui._push({"type": "..."})` — never touch DOM directly
+- Do NOT spawn raw threads from webapi.py — always use `ctrl.submit()`
+
+### Key Python modules
+- `src/teleauto/vpn/pritunl_auto.py` — `PritunlAutopilot`: subprocess calls to `pritunl-client.exe list/start/stop`, TOTP generation, 5s monitoring loop, auto-import `.ovpn`
 - `src/teleauto/login/login.py` — kills existing Telemart processes, launches exe, finds UI elements by automation ID (`LoginTextBox`, `PasswordBoxEdit`) via pywinauto UIA backend
 - `src/teleauto/authenticator/totp_client.py` — TOTP with NTP correction (`pool.ntp.org`, fallback to Google HTTP `Date:` header)
-- `src/teleauto/credentials.py` — AES-256-CBC encryption with Argon2id key derivation from PIN; all secrets stored in `credentials.json`
-- `src/teleauto/updater.py` — checks GitHub Releases API, downloads new exe, generates `updater.bat` for self-replacement
-- `src/teleauto/localization.py` — `TRANSLATIONS` dict with ru/en/ua; `tr(key, **kwargs)` for formatted messages
-- `src/teleauto/gui/constants.py` — `VERSION`, color palette, font definitions, timing constants (`NETWORK_MONITOR_INTERVAL`, `TELEMART_LAUNCH_DELAY`, `PING_TIMEOUT`)
-- `src/teleauto/gui/main_view.py` — `MainView`: primary UI frame shown after PIN unlock; contains status indicators and action buttons
-- `src/teleauto/gui/windows.py` — `ConfigWindow` (first-run credentials setup), `PinWindow` (PIN entry)
-- `src/teleauto/gui/widgets.py` — reusable custom CTk widget components
-- `src/teleauto/gui/fonts.py` — Windows GDI font loading helpers
-- `src/teleauto/gui/utils.py` — misc GUI utilities
-- `src/teleauto/unable/service_ui.py` — `ServiceUI`: pywinauto wrapper for Telemart's service navigation menu (Trade-In, Repair, service requests etc.); finds `NavigationMenuItem` by text
-- `src/teleauto/unable/work_place.py` — `work_place()`: automates workplace/device-type ComboBox selection in Telemart after login
-- `src/teleauto/network/network_utils.py` — `check_internet_ping()`, `wait_for_internet()`: subprocess ping checks, cancellable via event
-- `src/teleauto/utilities/` — dev/debug helpers: `element_viewer.py` (dumps pywinauto element tree), `check_button.py`, `check_offcet.py` (TOTP offset tester), `check_status_vpn.py`, `ip.py`, `totp_client.py`
+- `src/teleauto/credentials.py` — AES-256-CBC + Argon2id key derivation from PIN. PIN is **mandatory** — `save_credentials()` raises `ValueError` if PIN is empty
+- `src/teleauto/updater.py` — checks GitHub Releases API, downloads new exe, generates `updater.bat` for self-replacement. Paths are PS-escaped to prevent injection.
+- `src/teleauto/localization.py` — `TRANSLATIONS` dict with ru/en/ua for **backend log/error messages**. `tr(key, **kwargs)` for formatted strings. (UI strings live in `design/src/i18n.ts`)
+- `src/teleauto/gui/constants.py` — `VERSION`, color palette, timing constants. **Bump `VERSION` here when releasing.**
+- `src/teleauto/network/network_utils.py` — `check_internet_ping()`, `wait_for_internet()`: subprocess ping, cancellable via threading.Event
+- `src/teleauto/unable/service_ui.py` — pywinauto wrapper for Telemart navigation
+- `src/teleauto/unable/work_place.py` — automates workplace ComboBox selection post-login
+- `src/teleauto/utilities/` — dev/debug helpers (element_viewer, TOTP offset tester, etc.)
 
-**Security model:** PIN → Argon2id (time_cost=3, memory_cost=65536, parallelism=4) → AES-256-CBC key. Each credential field gets a unique IV. PIN hash verified via bcrypt.
+## Security model
 
-## Runtime Files (not in git)
+- PIN → Argon2id (time_cost=3, memory_cost=65536, parallelism=4) → AES-256-CBC key
+- Each credential field encrypted with a unique IV
+- PIN hash verified via bcrypt
+- PIN is mandatory (min 4 chars) — no plaintext fallback
+- Logger writes INFO+ to file (no DEBUG to prevent sensitive data leakage)
+- `open_url()` blocks non-https URLs
 
-- `credentials.json` — encrypted user credentials, TOTP secrets, settings
-- `profiles.json` — discovered Pritunl profile names
-- `profiles/` — `.ovpn` VPN profile files
-- `launcher.py` — entry point (gitignored, user-customizable)
+## Build pipeline
 
-## Platform Constraints
+1. `cd design && npm run build` — produces `design/dist/`
+2. `pyinstaller TeleAuto.spec` — bundles Python + `design/dist/` + WebView2 DLLs into single `dist/TeleAuto.exe`
 
-Windows-only: uses `ctypes.windll` (DWM dark title bar), `subprocess.STARTUPINFO` (hidden console windows), `taskkill`, Windows GDI font loading, pywinauto UIA backend. No cross-platform support.
+`TeleAuto.spec` includes:
+- `design/dist/` as data (React frontend)
+- `webview/lib/` — WebView2Loader.dll, .NET assemblies
+- `webview/js/` — pywebview JS bridge
+- Hidden imports: `webview.platforms.winforms`, `clr`, `pythonnet`, `PIL`, `pystray`
 
-## Key Dependencies
+## Runtime files (not in git)
 
-customtkinter (UI framework), pywinauto 0.6.9 (UI automation), pyotp (TOTP), cryptography (AES), bcrypt/argon2 (PIN security), ntplib (NTP sync), psutil, pywin32
+- `credentials.json` — encrypted credentials (auto-created on first run)
+- `profiles.json` — discovered Pritunl profile names (auto-created)
+- `profiles/` — `.ovpn` VPN profile files (place manually)
+- `dist/TeleAuto.exe` — build artifact
+
+## Platform constraints
+
+Windows-only: WebView2 (EdgeChromium), pywinauto UIA backend, `ctypes.windll`, `subprocess.STARTUPINFO`, `taskkill`, pywin32, Windows GDI fonts.
+
+## Key dependencies
+
+| Package | Purpose |
+|---|---|
+| pywebview ≥ 5.3 | Native window with WebView2 backend |
+| pythonnet / clr | .NET interop for WebView2 WinForms |
+| pywinauto 0.6.9 | UI automation for Telemart |
+| pyotp | TOTP generation |
+| cryptography | AES-256-CBC |
+| argon2-cffi | Argon2id key derivation |
+| bcrypt | PIN hash verification |
+| ntplib | NTP time sync |
+| psutil | Process management |
+| pywin32 | Windows API |
+| pystray | System tray icon |
+| pillow | Tray icon image handling |
+| requests | GitHub API for updates |
+| packaging | Version comparison |
